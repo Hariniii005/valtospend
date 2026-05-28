@@ -1,11 +1,13 @@
-# Project Title
+# ValtoSpend
 
 ## Description
-Provide a concise description of the project:
+ValtoSpend is an AI-powered expense tracking web app that helps users 
+understand spending habits and predict future expenses.
 
-- What problem is being solved?
-- What is the practical use case?
-- What is the expected outcome?
+- Problem: People struggle to track where their money goes
+- Use case: Upload expenses, see dashboards, get AI-based spending forecasts
+- Expected outcome: Actionable financial insights + monthly spend predictions
+
 
 ## Setup
 Create and activate a virtual environment, then install dependencies:
