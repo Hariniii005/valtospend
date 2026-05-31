@@ -12,10 +12,10 @@ understand spending habits and predict future expenses.
 ## Setup
 Create and activate a virtual environment, then install dependencies:
 
-```bash
+```
 python -m venv .venv
-source .venv/bin/activate  # macOS/Linux
-# .venv\Scripts\activate   # Windows
+.venv\Scripts\activate        # Windows
+source .venv/bin/activate     # macOS/Linux
 
 pip install -r requirements.txt
 ```
@@ -23,25 +23,25 @@ pip install -r requirements.txt
 ## Usage
 Run the project:
 
-```bash
-python src/main.py
+```
+python -m streamlit run main.py
 ```
 
-Briefly describe:
+- **Input data:** `expenses.csv` — 3,655 real household expense records 
+  (2021–2024) with monthly spending by category, income, and savings
+- **Output/results:** Interactive dashboard with spending charts, 
+  AI-predicted next month expenses, and personalised financial insights
 
-- Input data
-- Output/results
 
 ## Project Structure
 
-```text
-.
+```
+ss26-valtospend-rajaram/
 ├── README.md
 ├── .gitignore
 ├── requirements.txt
-└── src/
-    ├── main.py
-    └── ...
+├── expenses.csv
+└── main.py
 ```
 
 ## Requirements
@@ -56,5 +56,4 @@ Briefly describe:
 
 ## Authors
 
-- Name Surname
-- Name Surname
+- Harini Rajaram
