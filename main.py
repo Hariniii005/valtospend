@@ -192,7 +192,7 @@ if profile is None:
     st.write("This takes 10 seconds and personalises the entire app for you.")
 
     with st.form("profile_form"):
-        p_name    = st.text_input("Your first name", placeholder="e.g. Harini")
+        p_name = st.text_input("Your first name")
         p_income  = st.number_input("Your monthly income (€)", min_value=0.0, step=100.0, value=2000.0)
         p_bracket = st.selectbox("Income bracket", BRACKETS)
         submitted = st.form_submit_button("🚀 Start ValtoSpend", type="primary")
@@ -381,8 +381,8 @@ with tab2:
     min_date  = df["Date"].min().date()
     max_date  = df["Date"].max().date()
     date_range = st.sidebar.date_input(
-        "Date range", value=(min_date, max_date),
-        min_value=min_date, max_value=max_date
+    "Date range", value=(min_date, min_date),
+    min_value=min_date, max_value=max_date
     )
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start, end = date_range
