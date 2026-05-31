@@ -381,9 +381,14 @@ with tab2:
     min_date  = df["Date"].min().date()
     max_date  = df["Date"].max().date()
     date_range = st.sidebar.date_input(
-    "Date range", value=(min_date, min_date),
-    min_value=min_date, max_value=max_date
-    )
+    "Date range", value=(min_date, max_date),
+    min_value=min_date, max_value=max_date)
+if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+    if date_range[1] > max_date:
+        date_range = (date_range[0], max_date)
+if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
+    if date_range[1] > max_date:
+        date_range = (date_range[0], max_date)
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start, end = date_range
         filtered = df[(df["Date"].dt.date >= start) & (df["Date"].dt.date <= end)].copy()
