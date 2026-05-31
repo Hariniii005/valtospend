@@ -27,10 +27,10 @@ Run the project:
 python -m streamlit run main.py
 ```
 
-- **Input data:** `expenses.csv` — 3,655 real household expense records 
-  (2021–2024) with monthly spending by category, income, and savings
-- **Output/results:** Interactive dashboard with spending charts, 
-  AI-predicted next month expenses, and personalised financial insights
+3,655 real household expense records used to train the AI model. 
+Users add their own real-time expenses directly in the app.
+-Output: Interactive dashboard with spending charts, AI-predicted next month expenses,
+ and personalised financial insights
 
 
 ## Project Structure
