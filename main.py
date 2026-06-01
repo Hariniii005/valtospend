@@ -73,7 +73,8 @@ def init_db():
         df_csv.to_sql("expenses", conn, if_exists="append", index=False)
     conn.commit()
     conn.close()
-
+    
+@st.cache_data
 def load_data():
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql("SELECT * FROM expenses", conn)
@@ -522,7 +523,7 @@ with tab3:
 
     if len(model_df) >= 20:
         X_tr, X_te, y_tr, y_te = train_test_split(X_rf, y_rf, test_size=0.2, random_state=42)
-        rf = RandomForestRegressor(n_estimators=100, random_state=42)
+        rf = RandomForestRegressor(n_estimators=10, random_state=42)
         rf.fit(X_tr, y_tr)
         mae_rf = mean_absolute_error(y_te, rf.predict(X_te))
         r2_rf  = r2_score(y_te, rf.predict(X_te))
