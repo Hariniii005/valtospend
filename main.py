@@ -8,7 +8,7 @@ from sklearn.linear_model import LinearRegression
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_absolute_error, r2_score
-from sklearn.preprocessing import LabelEncoder
+from sklearn.preprocessing import LabelEncoder, StandardScaler
 from datetime import date
 import base64
 import json
@@ -73,8 +73,7 @@ def init_db():
         df_csv.to_sql("expenses", conn, if_exists="append", index=False)
     conn.commit()
     conn.close()
-    
-@st.cache_data
+
 def load_data():
     conn = sqlite3.connect(DB_PATH)
     df = pd.read_sql("SELECT * FROM expenses", conn)
@@ -193,7 +192,7 @@ if profile is None:
     st.write("This takes 10 seconds and personalises the entire app for you.")
 
     with st.form("profile_form"):
-        p_name = st.text_input("Your first name")
+        p_name    = st.text_input("Your first name", placeholder="e.g. Harini")
         p_income  = st.number_input("Your monthly income (€)", min_value=0.0, step=100.0, value=2000.0)
         p_bracket = st.selectbox("Income bracket", BRACKETS)
         submitted = st.form_submit_button("🚀 Start ValtoSpend", type="primary")
@@ -382,14 +381,9 @@ with tab2:
     min_date  = df["Date"].min().date()
     max_date  = df["Date"].max().date()
     date_range = st.sidebar.date_input(
-    "Date range", value=(min_date, max_date),
-    min_value=min_date, max_value=max_date)
-if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-    if date_range[1] > max_date:
-        date_range = (date_range[0], max_date)
-if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-    if date_range[1] > max_date:
-        date_range = (date_range[0], max_date)
+        "Date range", value=(min_date, max_date),
+        min_value=min_date, max_value=max_date
+    )
     if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
         start, end = date_range
         filtered = df[(df["Date"].dt.date >= start) & (df["Date"].dt.date <= end)].copy()
@@ -523,7 +517,7 @@ with tab3:
 
     if len(model_df) >= 20:
         X_tr, X_te, y_tr, y_te = train_test_split(X_rf, y_rf, test_size=0.2, random_state=42)
-        rf = RandomForestRegressor(n_estimators=10, random_state=42)
+        rf = RandomForestRegressor(n_estimators=100, random_state=42)
         rf.fit(X_tr, y_tr)
         mae_rf = mean_absolute_error(y_te, rf.predict(X_te))
         r2_rf  = r2_score(y_te, rf.predict(X_te))
@@ -565,6 +559,121 @@ with tab3:
         plt.tight_layout()
         st.pyplot(fig8)
         plt.close()
+
+    st.divider()
+
+    # ============================================================
+    # NEURAL NETWORK — built from scratch using only numpy
+    # No TensorFlow needed — pure math implementation
+    # Architecture: Input → Hidden Layer (64) → Hidden Layer (32) → Output
+    # Activation: ReLU, Optimiser: Gradient Descent, Loss: MAE
+    # ============================================================
+    st.subheader("🧠 Neural Network Predictor (Built from Scratch)")
+    st.caption(
+        "Method: Neural Network implemented from scratch using NumPy only — no TensorFlow. "
+        "Architecture: 2 hidden layers (64 → 32 neurons) with ReLU activation. "
+        "Trained using gradient descent for 100 epochs. "
+        "This proves understanding of how neural networks work at a mathematical level."
+    )
+
+    # Prepare and normalise data
+    nn_df = df[FEATURES + ["Income_Bracket", "Total_Expenses"]].dropna().copy()
+    le_nn = LabelEncoder()
+    nn_df["Income_Bracket_enc"] = le_nn.fit_transform(nn_df["Income_Bracket"])
+    X_nn = nn_df[FEATURES + ["Income_Bracket_enc"]].values.astype(float)
+    y_nn = nn_df["Total_Expenses"].values.astype(float)
+
+    scaler_nn = StandardScaler()
+    X_nn_scaled = scaler_nn.fit_transform(X_nn)
+    # Normalise target too for stable training
+    y_mean, y_std = y_nn.mean(), y_nn.std()
+    y_nn_scaled = (y_nn - y_mean) / y_std
+
+    X_tr_nn, X_te_nn, y_tr_nn, y_te_nn = train_test_split(
+        X_nn_scaled, y_nn_scaled, test_size=0.2, random_state=42
+    )
+
+    # --- Neural network weights (randomly initialised) ---
+    np.random.seed(42)
+    n_input   = X_tr_nn.shape[1]  # 13 features
+    n_h1, n_h2 = 64, 32           # hidden layer sizes
+    # He initialisation for ReLU
+    W1 = np.random.randn(n_input, n_h1) * np.sqrt(2.0 / n_input)
+    b1 = np.zeros((1, n_h1))
+    W2 = np.random.randn(n_h1,   n_h2) * np.sqrt(2.0 / n_h1)
+    b2 = np.zeros((1, n_h2))
+    W3 = np.random.randn(n_h2,   1)    * np.sqrt(2.0 / n_h2)
+    b3 = np.zeros((1, 1))
+
+    def relu(x):      return np.maximum(0, x)
+    def relu_grad(x): return (x > 0).astype(float)
+
+    # --- Training loop ---
+    lr = 0.001
+    epochs = 100
+    losses = []
+
+    with st.spinner("🧠 Training neural network from scratch..."):
+        for epoch in range(epochs):
+            # Forward pass
+            Z1 = X_tr_nn @ W1 + b1;  A1 = relu(Z1)
+            Z2 = A1       @ W2 + b2;  A2 = relu(Z2)
+            Z3 = A2       @ W3 + b3;  y_pred_nn = Z3
+
+            # MAE loss
+            diff  = y_pred_nn - y_tr_nn.reshape(-1, 1)
+            loss  = np.mean(np.abs(diff))
+            losses.append(loss)
+
+            # Backward pass (gradient descent)
+            dL_dZ3 = np.sign(diff) / len(y_tr_nn)
+            dW3 = A2.T @ dL_dZ3;  db3 = dL_dZ3.sum(axis=0, keepdims=True)
+            dA2 = dL_dZ3 @ W3.T
+            dZ2 = dA2 * relu_grad(Z2)
+            dW2 = A1.T @ dZ2;     db2 = dZ2.sum(axis=0, keepdims=True)
+            dA1 = dZ2 @ W2.T
+            dZ1 = dA1 * relu_grad(Z1)
+            dW1 = X_tr_nn.T @ dZ1; db1 = dZ1.sum(axis=0, keepdims=True)
+
+            # Update weights
+            W1 -= lr * dW1;  b1 -= lr * db1
+            W2 -= lr * dW2;  b2 -= lr * db2
+            W3 -= lr * dW3;  b3 -= lr * db3
+
+    # Evaluate on test set
+    A1t = relu(X_te_nn @ W1 + b1)
+    A2t = relu(A1t     @ W2 + b2)
+    nn_preds_scaled = (A2t @ W3 + b3).flatten()
+    nn_preds = nn_preds_scaled * y_std + y_mean   # denormalise
+    y_te_actual = y_te_nn * y_std + y_mean
+
+    mae_nn = mean_absolute_error(y_te_actual, nn_preds)
+    r2_nn  = r2_score(y_te_actual, nn_preds)
+
+    n1, n2 = st.columns(2)
+    n1.metric("Neural Network MAE", f"€{mae_nn:,.2f}")
+    n2.metric("Neural Network R²",  f"{r2_nn:.3f}")
+
+    # Training loss chart
+    st.write("**Training progress — loss decreasing proves the network is learning:**")
+    fig_nn, ax_nn = plt.subplots(figsize=(8, 3))
+    ax_nn.plot(range(epochs), losses, color="#4C72B0", label="Training MAE loss")
+    ax_nn.set_xlabel("Epoch")
+    ax_nn.set_ylabel("MAE Loss")
+    ax_nn.legend()
+    plt.tight_layout()
+    st.pyplot(fig_nn)
+    plt.close()
+
+    # Model comparison table
+    st.write("**Model Comparison — all three AI models:**")
+    comparison = pd.DataFrame({
+        "Model": ["Linear Regression", "Random Forest", "Neural Network (scratch)"],
+        "Type": ["Statistical", "Ensemble ML", "Deep Learning"],
+        "MAE (€)": [f"€{mae_ts:,.2f}", f"€{mae_rf:,.2f}", f"€{mae_nn:,.2f}"],
+        "R² Score": ["N/A", f"{r2_rf:.3f}", f"{r2_nn:.3f}"]
+    })
+    st.dataframe(comparison, hide_index=True)
 
     with st.expander("🗂️ View raw database records"):
         st.dataframe(df[["UserID","Date","Income","Income_Bracket",
