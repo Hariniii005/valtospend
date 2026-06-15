@@ -61,12 +61,7 @@ def init_db():
             amount REAL, note TEXT
         )
     """)
-    cursor.execute("""
-        CREATE TABLE IF NOT EXISTS user_profile (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            name TEXT, income REAL, bracket TEXT
-        )
-    """)
+    # user_profile table removed — profile now stored in session state per user
     count = cursor.execute("SELECT COUNT(*) FROM expenses").fetchone()[0]
     if count == 0 and os.path.exists(CSV_PATH):
         df_csv = pd.read_csv(CSV_PATH)
@@ -107,20 +102,20 @@ def delete_my_expense(row_id):
     conn.close()
 
 def get_profile():
-    conn = sqlite3.connect(DB_PATH)
-    row = conn.execute("SELECT name, income, bracket FROM user_profile LIMIT 1").fetchone()
-    conn.close()
-    return row  # (name, income, bracket) or None
+    """Get profile from session state — private to each browser session."""
+    if "user_name" in st.session_state:
+        return (
+            st.session_state["user_name"],
+            st.session_state["user_income"],
+            st.session_state["user_bracket"]
+        )
+    return None
 
 def save_profile(name, income, bracket):
-    conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM user_profile")
-    conn.execute(
-        "INSERT INTO user_profile (name, income, bracket) VALUES (?, ?, ?)",
-        (name, float(income), bracket)
-    )
-    conn.commit()
-    conn.close()
+    """Save profile to session state — not shared between users."""
+    st.session_state["user_name"]    = name
+    st.session_state["user_income"]  = float(income)
+    st.session_state["user_bracket"] = bracket
 
 # ============================================================
 # AI RECEIPT READER — calls Claude API
