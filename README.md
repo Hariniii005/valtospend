@@ -9,7 +9,7 @@
 |-------|------|--------|
 | 1 | Business idea & app definition | Done |
 | 2 | Real dataset (3,655 rows) + SQLite database | Done |
-| 3 | AI model (Random Forest + Linear Regression) | Done |
+| 3 | AI model (Random Forest + Linear Regression + Neural Network built from scratch) | Done |
 | 4 | Streamlit web app + deployment | Done |
 | 5 | Presentation slides | In progress |
 
@@ -55,7 +55,11 @@ ss26-valtospend-rajaram/
 
 ## AI Components
 - **Linear Regression** — predicts next month's average spending trend
-- **Random Forest Regressor** — predicts total monthly expenses based on income, bracket, and spending ratios. Evaluated with MAE and R² score on a 20% held-out test set.
+- **Random Forest Regressor** — predicts total monthly expenses based on income, 
+  bracket, and spending ratios. Evaluated with MAE and R² score on 20% test set.
+- **Neural Network (built from scratch)** — deep learning model with 2 hidden layers 
+  (64 → 32 neurons), ReLU activation, trained using gradient descent for 100 epochs. 
+  Implemented using NumPy only — no TensorFlow.
 - **Claude AI** — reads receipt photos and extracts amount, category, and description
 
 ## Tech Stack
