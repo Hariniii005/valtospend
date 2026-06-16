@@ -18,6 +18,10 @@ from charts    import (bar_chart_categories, pie_chart_categories, bracket_compa
                        forecast_chart, feature_importance_chart, nn_loss_chart)
 from receipt   import read_receipt_with_ai
 from auth      import init_users_table, register_user, login_user, update_profile
+from live_data import get_live_rates, get_community_stats, convert_amount
+
+# ── API Key ─────────────────────────────────────────────────────────────────
+EXCHANGE_API_KEY = "99e195f29733ad0ef48de417"  
 
 # ── Constants ───────────────────────────────────────────────────────────────
 SPEND_COLS = ["Food","Groceries","Transport","Entertainment",
@@ -81,6 +85,12 @@ CURRENCIES = {
 
 # ── Page config & DB init ───────────────────────────────────────────────────
 st.set_page_config(page_title="ValtoSpend", page_icon="💰", layout="wide")
+
+# ── Logo (shown in sidebar automatically) ───────────────────────────────────
+import os
+if os.path.exists("logo.png"):
+    st.logo("logo.png")
+
 init_db()
 init_users_table()
 df = load_data()
@@ -168,6 +178,8 @@ if not st.session_state.logged_in:
     col_hero, col_auth = st.columns([1.2, 1], gap="large")
 
     with col_hero:
+        if os.path.exists("logo.png"):
+            st.image("logo.png", width=130)
         st.markdown('<div class="hero-tag">AI-Powered Finance</div>', unsafe_allow_html=True)
         st.markdown("""
         <div class="hero-title">
@@ -275,7 +287,12 @@ username     = st.session_state.username
 user_income  = st.session_state.user_income
 user_bracket = st.session_state.user_bracket
 
-st.title(f"💰 ValtoSpend — Welcome back, {username.capitalize()}! 👋")
+col_logo, col_title = st.columns([1, 9])
+with col_logo:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=65)
+with col_title:
+    st.title(f"Welcome back, {username.capitalize()}! 👋")
 
 # ── Sidebar ─────────────────────────────────────────────────────────────────
 with st.sidebar:
@@ -330,8 +347,8 @@ filtered = df.copy()
 if sel_bracket != "All":
     filtered = filtered[filtered["Income_Bracket"] == sel_bracket]
 
-tab1, tab2, tab3, tab4 = st.tabs(
-    ["👤 My Expenses", "💰 Budget", "📊 Market Insights", "🤖 AI Prediction"]
+tab1, tab2, tab3, tab4, tab5 = st.tabs(
+    ["👤 My Expenses", "💰 Budget", "📊 Market Insights", "🤖 AI Prediction", "🌐 Live Data"]
 )
 
 # ════════════════════════════════════════════════════════════════════════════
@@ -648,3 +665,96 @@ with tab4:
             records_df = df
         st.dataframe(records_df[["UserID","Date","Income","Income_Bracket",
                           "Total_Expenses","Savings"]+SPEND_COLS].head(200))
+
+# ════════════════════════════════════════════════════════════════════════════
+# TAB 5 — LIVE DATA
+# ════════════════════════════════════════════════════════════════════════════
+with tab5:
+    st.header("🌐 Live Data")
+
+    # ── SECTION 1: Community Stats ──────────────────────────────────────
+    st.subheader("👥 ValtoSpend Community — Live Stats")
+    st.caption("Real-time statistics from all registered ValtoSpend users. Updates every time someone logs an expense.")
+
+    stats = get_community_stats()
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("👤 Registered Users",    stats["total_users"])
+    c2.metric("📝 Expenses Logged",     stats["total_logged"])
+    c3.metric("📅 Logged This Month",   stats["this_month"])
+    c4.metric("🏆 Top Category",        stats["top_category"])
+
+    if stats["total_logged"] > 0:
+        st.metric("💰 Total Community Spend", fmt(stats["total_amount"]))
+        st.metric("📊 Avg per Transaction",   fmt(stats["avg_expense"]))
+
+        if stats["category_totals"]:
+            st.write("**Community spending by category:**")
+            import matplotlib.pyplot as plt
+            cat_df = pd.DataFrame(
+                list(stats["category_totals"].items()),
+                columns=["Category", "Total"]
+            ).sort_values("Total", ascending=False)
+            fig_c, ax_c = plt.subplots(figsize=(8, 3))
+            ax_c.bar(cat_df["Category"], cat_df["Total"], color="#00C9A7")
+            ax_c.set_ylabel(f"Total ({sym()})")
+            plt.xticks(rotation=45, ha="right")
+            plt.tight_layout()
+            st.pyplot(fig_c)
+            plt.close()
+    else:
+        st.info("No community data yet — be the first to log expenses!")
+
+    st.divider()
+
+    # ── SECTION 2: Live Currency Rates ──────────────────────────────────
+    st.subheader("💱 Live Currency Exchange Rates")
+    st.caption("Live rates updated every 24 hours from ExchangeRate-API.")
+
+    base_curr = st.selectbox(
+        "Base currency",
+        list(CURRENCIES.keys()),
+        index=next((i for i, (k,(c,s)) in enumerate(CURRENCIES.items())
+                    if c == st.session_state.user_currency), 0)
+    )
+    base_code = CURRENCIES[base_curr][0]
+
+    with st.spinner("Fetching live rates..."):
+        rates = get_live_rates(EXCHANGE_API_KEY, base_code)
+
+    if "error" in rates:
+        st.error(f"Could not fetch rates: {rates['error']}")
+    elif rates:
+        st.success(f"✅ Rates updated: {rates.get('updated', 'N/A')}")
+
+        # Show key rates
+        key_currencies = ["USD","EUR","GBP","INR","JPY","CAD","AUD",
+                          "CHF","CNY","KRW","BRL","MXN","SGD","HKD"]
+        key_rates = {k: v for k, v in rates["rates"].items()
+                     if k in key_currencies and k != base_code}
+
+        rate_df = pd.DataFrame(
+            [(k, f"{v:.4f}") for k, v in sorted(key_rates.items())],
+            columns=[f"Currency", f"1 {base_code} ="]
+        )
+
+        col_r1, col_r2 = st.columns(2)
+        with col_r1:
+            st.dataframe(rate_df, hide_index=True, use_container_width=True)
+        with col_r2:
+            # Converter
+            st.write("**Quick Converter:**")
+            amount_in  = st.number_input("Amount", value=100.0, step=10.0)
+            to_curr    = st.selectbox("Convert to", list(CURRENCIES.keys()))
+            to_code    = CURRENCIES[to_curr][0]
+            if to_code in rates.get("rates", {}):
+                converted = amount_in * rates["rates"].get(to_code, 1)
+                st.success(f"**{amount_in:.2f} {base_code} = {converted:.2f} {to_code}**")
+
+        # Show all rates in expander
+        with st.expander("📋 See all 50+ currency rates"):
+            all_rates_df = pd.DataFrame(
+                [(k, f"{v:.4f}") for k, v in sorted(rates["rates"].items())],
+                columns=["Currency", f"1 {base_code} ="]
+            )
+            st.dataframe(all_rates_df, hide_index=True, use_container_width=True)
