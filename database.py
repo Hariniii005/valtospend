@@ -33,9 +33,21 @@ def init_db():
     """)
     cursor.execute("""
         CREATE TABLE IF NOT EXISTS my_expenses (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            date TEXT, category TEXT,
-            amount REAL, note TEXT
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id   INTEGER DEFAULT 0,
+            date      TEXT,
+            category  TEXT,
+            amount    REAL,
+            note      TEXT
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS budgets (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id   INTEGER NOT NULL,
+            category  TEXT NOT NULL,
+            amount    REAL NOT NULL,
+            UNIQUE(user_id, category)
         )
     """)
     count = cursor.execute("SELECT COUNT(*) FROM expenses").fetchone()[0]
@@ -57,30 +69,66 @@ def load_data():
     return df
 
 
-def load_my_expenses():
-    """Load personal expenses for the current user."""
+def load_my_expenses(user_id: int):
+    """Load personal expenses for the logged-in user only."""
     conn = sqlite3.connect(DB_PATH)
-    df = pd.read_sql("SELECT * FROM my_expenses ORDER BY date DESC", conn)
+    df = pd.read_sql(
+        "SELECT * FROM my_expenses WHERE user_id=? ORDER BY date DESC",
+        conn, params=(user_id,)
+    )
     conn.close()
     if not df.empty:
         df["date"] = pd.to_datetime(df["date"])
     return df
 
 
-def add_my_expense(date_val, category, amount, note):
-    """Insert a new personal expense into the database."""
+def add_my_expense(user_id: int, date_val, category, amount, note):
+    """Insert a new personal expense for the logged-in user."""
     conn = sqlite3.connect(DB_PATH)
     conn.execute(
-        "INSERT INTO my_expenses (date, category, amount, note) VALUES (?, ?, ?, ?)",
-        (str(date_val), category, float(amount), note)
+        "INSERT INTO my_expenses (user_id, date, category, amount, note) VALUES (?,?,?,?,?)",
+        (user_id, str(date_val), category, float(amount), note)
     )
     conn.commit()
     conn.close()
 
 
-def delete_my_expense(row_id):
+def delete_my_expense(row_id: int):
     """Delete a personal expense by ID."""
     conn = sqlite3.connect(DB_PATH)
-    conn.execute("DELETE FROM my_expenses WHERE id = ?", (row_id,))
+    conn.execute("DELETE FROM my_expenses WHERE id=?", (row_id,))
     conn.commit()
     conn.close()
+
+
+def get_budgets(user_id: int) -> dict:
+    """Get all budget limits for a user as {category: amount}."""
+    conn = sqlite3.connect(DB_PATH)
+    rows = conn.execute(
+        "SELECT category, amount FROM budgets WHERE user_id=?", (user_id,)
+    ).fetchall()
+    conn.close()
+    return {row[0]: row[1] for row in rows}
+
+
+def set_budget(user_id: int, category: str, amount: float):
+    """Set or update a budget limit for a category."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO budgets (user_id, category, amount) VALUES (?,?,?) "
+        "ON CONFLICT(user_id, category) DO UPDATE SET amount=excluded.amount",
+        (user_id, category, amount)
+    )
+    conn.commit()
+    conn.close()
+
+
+def export_expenses_csv(user_id: int) -> str:
+    """Return personal expenses as CSV string for download."""
+    conn = sqlite3.connect(DB_PATH)
+    df = pd.read_sql(
+        "SELECT date, category, amount, note FROM my_expenses WHERE user_id=? ORDER BY date DESC",
+        conn, params=(user_id,)
+    )
+    conn.close()
+    return df.to_csv(index=False)
