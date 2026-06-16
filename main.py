@@ -86,10 +86,30 @@ CURRENCIES = {
 # ── Page config & DB init ───────────────────────────────────────────────────
 st.set_page_config(page_title="ValtoSpend", page_icon="💰", layout="wide")
 
-# ── Logo (shown in sidebar automatically) ───────────────────────────────────
 import os
+
+# ── Global CSS — pitch black + teal ─────────────────────────────────────────
+st.markdown("""
+<style>
+[data-testid="stAppViewContainer"], .stApp,
+section[data-testid="stSidebar"] > div,
+.stMainBlockContainer { background-color: #000000 !important; }
+[data-testid="stSidebarContent"] { background-color: #080808 !important; }
+.stButton > button[kind="primary"] {
+    background: #00C9A7 !important; color: #000 !important;
+    font-weight: 700 !important; border: none !important;
+    border-radius: 8px !important; width: 100%;
+}
+.stTabs [aria-selected="true"] {
+    color: #00C9A7 !important; border-bottom-color: #00C9A7 !important;
+}
+h1, h2, h3 { color: #ffffff !important; }
+p, label { color: #cccccc !important; }
+</style>
+""", unsafe_allow_html=True)
+
 if os.path.exists("logo.png"):
-    st.logo("logo.png")
+    st.logo("logo.png", size="large")
 
 init_db()
 init_users_table()
@@ -178,8 +198,6 @@ if not st.session_state.logged_in:
     col_hero, col_auth = st.columns([1.2, 1], gap="large")
 
     with col_hero:
-        if os.path.exists("logo.png"):
-            st.image("logo.png", width=130)
         st.markdown('<div class="hero-tag">AI-Powered Finance</div>', unsafe_allow_html=True)
         st.markdown("""
         <div class="hero-title">
