@@ -50,7 +50,11 @@ ss26-valtospend-rajaram/
 ├── .gitignore
 ├── requirements.txt
 ├── expenses.csv
-└── main.py
+├── main.py        ← app entry point and UI
+├── database.py    ← SQLite database functions
+├── ai_models.py   ← Linear Regression, Random Forest, Neural Network
+├── charts.py      ← all visualisation functions
+└── receipt.py     ← Claude AI receipt scanner
 ```
 
 ## AI Components
