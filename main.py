@@ -287,6 +287,22 @@ username     = st.session_state.username
 user_income  = st.session_state.user_income
 user_bracket = st.session_state.user_bracket
 
+# Global black theme for main app
+st.markdown("""
+<style>
+.stApp, section[data-testid="stSidebar"], .stMainBlockContainer {
+    background-color: #000000 !important;
+}
+.stButton > button[kind="primary"] {
+    background: #00C9A7 !important; color: #000 !important;
+    font-weight: 600 !important; border: none !important;
+}
+.stTabs [aria-selected="true"] {
+    color: #00C9A7 !important; border-bottom-color: #00C9A7 !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
 col_logo, col_title = st.columns([1, 9])
 with col_logo:
     if os.path.exists("logo.png"):
