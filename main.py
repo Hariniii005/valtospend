@@ -108,8 +108,12 @@ p, label { color: #cccccc !important; }
 </style>
 """, unsafe_allow_html=True)
 
-if os.path.exists("logo.png"):
-    st.logo("logo.png", size="large")
+# Manual logo in sidebar
+with st.sidebar:
+    if os.path.exists("logo.png"):
+        st.image("logo.png", width=90)
+    st.markdown("<h1 style='color:#00C9A7;font-size:40px;font-weight:900;margin:0;padding:0;'>ValtoSpend</h1>", unsafe_allow_html=True)
+    st.markdown("<p style='color:#444;font-size:11px;letter-spacing:3px;margin:0 0 1rem 0;'>SMART EXPENSE TRACKER</p>", unsafe_allow_html=True)
 
 init_db()
 init_users_table()
@@ -304,6 +308,71 @@ user_id      = st.session_state.user_id
 username     = st.session_state.username
 user_income  = st.session_state.user_income
 user_bracket = st.session_state.user_bracket
+
+# ── Splash screen — shown once per login ────────────────────────────────────
+if "splash_shown" not in st.session_state:
+    st.session_state.splash_shown = False
+
+if not st.session_state.splash_shown:
+    splash = st.empty()
+    with splash.container():
+        st.markdown("""
+        <style>
+        @keyframes fadeInUp {
+            0%   { opacity: 0; transform: translateY(40px); }
+            100% { opacity: 1; transform: translateY(0); }
+        }
+        @keyframes fadeOut {
+            0%   { opacity: 1; }
+            100% { opacity: 0; }
+        }
+        .splash-wrap {
+            position: fixed; top: 0; left: 0;
+            width: 100vw; height: 100vh;
+            background: #000000;
+            display: flex; flex-direction: column;
+            align-items: center; justify-content: center;
+            z-index: 99999;
+            animation: fadeInUp 0.8s ease forwards;
+        }
+        .splash-vs {
+            font-size: 120px; font-weight: 900;
+            background: linear-gradient(135deg, #00C9A7, #00E676);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -6px; line-height: 1;
+            animation: fadeInUp 0.8s ease forwards;
+        }
+        .splash-name {
+            font-size: 28px; font-weight: 300;
+            color: #ffffff; letter-spacing: 12px;
+            text-transform: uppercase; margin-top: 1rem;
+            animation: fadeInUp 1s ease forwards;
+        }
+        .splash-sub {
+            font-size: 13px; color: #333333;
+            letter-spacing: 4px; margin-top: 0.5rem;
+            animation: fadeInUp 1.2s ease forwards;
+        }
+        .splash-line {
+            width: 60px; height: 2px;
+            background: linear-gradient(90deg, #00C9A7, #00E676);
+            margin: 1.5rem auto 0; border-radius: 2px;
+            animation: fadeInUp 1.4s ease forwards;
+        }
+        </style>
+        <div class="splash-wrap">
+            <div class="splash-vs">VS</div>
+            <div class="splash-name">ValtoSpend</div>
+            <div class="splash-sub">SMART EXPENSE TRACKER</div>
+            <div class="splash-line"></div>
+        </div>
+        """, unsafe_allow_html=True)
+    import time
+    time.sleep(2.5)
+    splash.empty()
+    st.session_state.splash_shown = True
+    st.rerun()
 
 # Global black theme for main app
 st.markdown("""
