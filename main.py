@@ -262,7 +262,7 @@ if not st.session_state.logged_in:
             with st.form("login_form"):
                 lu = st.text_input("Username")
                 lp = st.text_input("Password", type="password")
-                if st.form_submit_button("Login →", type="primary", use_container_width=True):
+                if st.form_submit_button("Login →", type="primary", width='stretch'):
                     ok, result = login_user(lu, lp)
                     if ok:
                         uid, uname, income, bracket, currency = result
@@ -288,7 +288,7 @@ if not st.session_state.logged_in:
                 rbracket = st.selectbox("Income bracket", BRACKETS)
                 rcurr    = st.selectbox("Currency", list(CURRENCIES.keys()))
                 if st.form_submit_button("Create Account →", type="primary",
-                                         use_container_width=True):
+                                         width='stretch'):
                     if rp != rp2:
                         st.error("Passwords don't match.")
                     else:
@@ -314,63 +314,57 @@ if "splash_shown" not in st.session_state:
     st.session_state.splash_shown = False
 
 if not st.session_state.splash_shown:
-    splash = st.empty()
-    with splash.container():
-        st.markdown("""
-        <style>
-        @keyframes fadeInUp {
-            0%   { opacity: 0; transform: translateY(40px); }
-            100% { opacity: 1; transform: translateY(0); }
-        }
-        @keyframes fadeOut {
-            0%   { opacity: 1; }
-            100% { opacity: 0; }
-        }
-        .splash-wrap {
-            position: fixed; top: 0; left: 0;
-            width: 100vw; height: 100vh;
-            background: #000000;
-            display: flex; flex-direction: column;
-            align-items: center; justify-content: center;
-            z-index: 99999;
-            animation: fadeInUp 0.8s ease forwards;
-        }
-        .splash-vs {
-            font-size: 120px; font-weight: 900;
-            background: linear-gradient(135deg, #00C9A7, #00E676);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            letter-spacing: -6px; line-height: 1;
-            animation: fadeInUp 0.8s ease forwards;
-        }
-        .splash-name {
-            font-size: 28px; font-weight: 300;
-            color: #ffffff; letter-spacing: 12px;
-            text-transform: uppercase; margin-top: 1rem;
-            animation: fadeInUp 1s ease forwards;
-        }
-        .splash-sub {
-            font-size: 13px; color: #333333;
-            letter-spacing: 4px; margin-top: 0.5rem;
-            animation: fadeInUp 1.2s ease forwards;
-        }
-        .splash-line {
-            width: 60px; height: 2px;
-            background: linear-gradient(90deg, #00C9A7, #00E676);
-            margin: 1.5rem auto 0; border-radius: 2px;
-            animation: fadeInUp 1.4s ease forwards;
-        }
-        </style>
-        <div class="splash-wrap">
-            <div class="splash-vs">VS</div>
-            <div class="splash-name">ValtoSpend</div>
-            <div class="splash-sub">SMART EXPENSE TRACKER</div>
-            <div class="splash-line"></div>
-        </div>
-        """, unsafe_allow_html=True)
     import time
+    st.markdown("""
+    <style>
+    @keyframes fadeInUp {
+        0%   { opacity: 0; transform: translateY(30px); }
+        100% { opacity: 1; transform: translateY(0); }
+    }
+    @keyframes glow {
+        0%, 100% { text-shadow: 0 0 20px #00C9A7; }
+        50%       { text-shadow: 0 0 60px #00E676; }
+    }
+    .splash-outer {
+        background: #000000;
+        min-height: 80vh;
+        display: flex; flex-direction: column;
+        align-items: center; justify-content: center;
+        text-align: center; padding: 4rem 2rem;
+    }
+    .splash-vs {
+        font-size: 130px; font-weight: 900;
+        color: #00C9A7;
+        letter-spacing: -6px; line-height: 1;
+        animation: fadeInUp 0.8s ease, glow 2s ease infinite;
+        margin-bottom: 0.5rem;
+    }
+    .splash-name {
+        font-size: 32px; font-weight: 300;
+        color: #ffffff; letter-spacing: 10px;
+        text-transform: uppercase;
+        animation: fadeInUp 1s ease;
+    }
+    .splash-sub {
+        font-size: 13px; color: #444444;
+        letter-spacing: 4px; margin-top: 0.5rem;
+        animation: fadeInUp 1.2s ease;
+    }
+    .splash-bar {
+        width: 80px; height: 3px;
+        background: #00C9A7;
+        margin: 1.5rem auto 0; border-radius: 2px;
+        animation: fadeInUp 1.4s ease;
+    }
+    </style>
+    <div class="splash-outer">
+        <div class="splash-vs">VS</div>
+        <div class="splash-name">ValtoSpend</div>
+        <div class="splash-sub">SMART EXPENSE TRACKER</div>
+        <div class="splash-bar"></div>
+    </div>
+    """, unsafe_allow_html=True)
     time.sleep(2.5)
-    splash.empty()
     st.session_state.splash_shown = True
     st.rerun()
 
@@ -843,7 +837,7 @@ with tab5:
 
         col_r1, col_r2 = st.columns(2)
         with col_r1:
-            st.dataframe(rate_df, hide_index=True, use_container_width=True)
+            st.dataframe(rate_df, hide_index=True, width='stretch')
         with col_r2:
             # Converter
             st.write("**Quick Converter:**")
@@ -860,4 +854,4 @@ with tab5:
                 [(k, f"{v:.4f}") for k, v in sorted(rates["rates"].items())],
                 columns=["Currency", f"1 {base_code} ="]
             )
-            st.dataframe(all_rates_df, hide_index=True, use_container_width=True)
+            st.dataframe(all_rates_df, hide_index=True, width='stretch')
