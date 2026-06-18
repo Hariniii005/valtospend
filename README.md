@@ -69,6 +69,11 @@ ss26-valtospend-rajaram/
 ## Tech Stack
 Python, Streamlit, SQLite, scikit-learn, pandas, matplotlib, Claude AI.
 
+## Development Environment
+This project was developed and tested using VS Code with Python 3.9.
+The application is fully executable via:
+python -m streamlit run main.py
+
 ## Requirements
 - Python >= 3.9
 - All dependencies listed in `requirements.txt`
