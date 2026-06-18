@@ -11,7 +11,7 @@
 | 2 | Real dataset (3,655 rows) + SQLite database | Done |
 | 3 | AI model (Random Forest + Linear Regression + Neural Network built from scratch) | Done |
 | 4 | Streamlit web app + deployment | Done |
-| 5 | Presentation slides | In progress |
+| 5 | Presentation slides | Done |
 
 ## Description
 ValtoSpend is an AI-powered expense tracking web application that helps 
@@ -68,6 +68,11 @@ ss26-valtospend-rajaram/
 
 ## Tech Stack
 Python, Streamlit, SQLite, scikit-learn, pandas, matplotlib, Claude AI.
+
+## Development Environment
+This project was developed and tested using VS Code with Python 3.9.
+The application is fully executable via:
+python -m streamlit run main.py
 
 ## Requirements
 - Python >= 3.9
