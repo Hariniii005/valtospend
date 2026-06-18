@@ -11,19 +11,19 @@ SPEND_COLS = [
 ]
 
 
-def bar_chart_categories(filtered_df):
-    """Bar chart of average spend per category."""
-    avg_cats = filtered_df[SPEND_COLS].mean().sort_values(ascending=False)
+def bar_chart_categories(filtered_df, rate=1.0, symbol="€"):
+    """Bar chart of average spend per category. rate converts EUR -> selected currency."""
+    avg_cats = (filtered_df[SPEND_COLS].mean() * rate).sort_values(ascending=False)
     fig, ax = plt.subplots(figsize=(6, 4))
     ax.bar(avg_cats.index, avg_cats.values, color="#4C72B0")
-    ax.set_ylabel("Average (€)")
+    ax.set_ylabel(f"Average ({symbol})")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     return fig, avg_cats
 
 
 def pie_chart_categories(avg_cats):
-    """Pie chart of category spending distribution."""
+    """Pie chart of category spending distribution. Percentages are currency-independent."""
     fig, ax = plt.subplots(figsize=(5, 4))
     ax.pie(avg_cats.values, labels=avg_cats.index, autopct="%1.1f%%", startangle=90)
     ax.axis("equal")
@@ -31,11 +31,12 @@ def pie_chart_categories(avg_cats):
     return fig
 
 
-def bracket_comparison_chart(df):
+def bracket_comparison_chart(df, rate=1.0, symbol="€"):
     """Grouped bar chart comparing income, expenses, savings by bracket."""
     b_summary = df.groupby("Income_Bracket")[
         ["Income", "Total_Expenses", "Savings"]
     ].mean().reset_index().sort_values("Income")
+    b_summary[["Income", "Total_Expenses", "Savings"]] *= rate
 
     fig, ax = plt.subplots(figsize=(8, 4))
     x = np.arange(len(b_summary))
@@ -45,45 +46,46 @@ def bracket_comparison_chart(df):
     ax.bar(x + w, b_summary["Savings"],        w, label="Savings",        color="#55A868")
     ax.set_xticks(x)
     ax.set_xticklabels(b_summary["Income_Bracket"], rotation=15)
-    ax.set_ylabel("Average (€)")
+    ax.set_ylabel(f"Average ({symbol})")
     ax.legend()
     plt.tight_layout()
     return fig
 
 
-def monthly_trend_chart(filtered_df):
+def monthly_trend_chart(filtered_df, rate=1.0, symbol="€"):
     """Line chart of average monthly total expenses over time."""
     m_trend = (
         filtered_df.groupby("Date")["Total_Expenses"]
         .mean().reset_index().sort_values("Date")
     )
+    m_trend["Total_Expenses"] *= rate
     m_trend["Label"] = m_trend["Date"].dt.strftime("%b %Y")
     fig, ax = plt.subplots(figsize=(10, 3))
     ax.plot(m_trend["Label"], m_trend["Total_Expenses"], marker="o", color="#4C72B0")
-    ax.set_ylabel("Avg Total Expenses (€)")
+    ax.set_ylabel(f"Avg Total Expenses ({symbol})")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     return fig
 
 
-def personal_category_chart(my_df):
-    """Bar chart of personal spending by category."""
+def personal_category_chart(my_df, symbol="€"):
+    """Bar chart of personal spending by category. my_df amounts already in selected currency."""
     cat_totals = my_df.groupby("category")["amount"].sum().sort_values(ascending=False)
     fig, ax = plt.subplots(figsize=(6, 3))
     ax.bar(cat_totals.index, cat_totals.values, color="#4C72B0")
-    ax.set_ylabel("Total (€)")
+    ax.set_ylabel(f"Total ({symbol})")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     return fig
 
 
-def personal_weekly_chart(my_df):
+def personal_weekly_chart(my_df, symbol="€"):
     """Line chart of personal spending over time (weekly)."""
     my_df["week"] = my_df["date"].dt.to_period("W").astype(str)
     weekly = my_df.groupby("week")["amount"].sum()
     fig, ax = plt.subplots(figsize=(6, 3))
     ax.plot(weekly.index, weekly.values, marker="o", color="#DD8452")
-    ax.set_ylabel("Total (€)")
+    ax.set_ylabel(f"Total ({symbol})")
     plt.xticks(rotation=45, ha="right")
     plt.tight_layout()
     return fig

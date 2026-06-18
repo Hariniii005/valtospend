@@ -136,6 +136,20 @@ def sym():
 def fmt(amount):
     return f"{sym()}{amount:,.2f}"
 
+def get_conversion_rate():
+    """Get EUR -> selected currency conversion rate using live API. Cached per session."""
+    target = st.session_state.user_currency
+    if target == "EUR":
+        return 1.0
+    cache_key = f"rate_EUR_{target}"
+    if cache_key not in st.session_state:
+        try:
+            rates_data = get_live_rates(EXCHANGE_API_KEY, "EUR")
+            st.session_state[cache_key] = rates_data.get("rates", {}).get(target, 1.0)
+        except Exception:
+            st.session_state[cache_key] = 1.0
+    return st.session_state[cache_key]
+
 # ════════════════════════════════════════════════════════════════════════════
 # AUTH SCREEN — shown when not logged in
 # ════════════════════════════════════════════════════════════════════════════
@@ -262,7 +276,7 @@ if not st.session_state.logged_in:
             with st.form("login_form"):
                 lu = st.text_input("Username")
                 lp = st.text_input("Password", type="password")
-                if st.form_submit_button("Login →", type="primary", width='stretch'):
+                if st.form_submit_button("Login →", type="primary", use_container_width=True):
                     ok, result = login_user(lu, lp)
                     if ok:
                         uid, uname, income, bracket, currency = result
@@ -288,7 +302,7 @@ if not st.session_state.logged_in:
                 rbracket = st.selectbox("Income bracket", BRACKETS)
                 rcurr    = st.selectbox("Currency", list(CURRENCIES.keys()))
                 if st.form_submit_button("Create Account →", type="primary",
-                                         width='stretch'):
+                                         use_container_width=True):
                     if rp != rp2:
                         st.error("Passwords don't match.")
                     else:
@@ -518,10 +532,10 @@ with tab1:
         col_a, col_b = st.columns(2)
         with col_a:
             st.subheader("My Spending by Category")
-            st.pyplot(personal_category_chart(my_df))
+            st.pyplot(personal_category_chart(my_df, symbol=sym()))
         with col_b:
             st.subheader("My Spending Over Time")
-            st.pyplot(personal_weekly_chart(my_df))
+            st.pyplot(personal_weekly_chart(my_df, symbol=sym()))
 
         # AI spending tips
         st.subheader("💡 AI Spending Tips")
@@ -663,17 +677,18 @@ with tab3:
     col_l, col_r = st.columns(2)
     with col_l:
         st.subheader("Average spend per category")
-        fig, avg_cats = bar_chart_categories(filtered)
+        conv_rate = get_conversion_rate()
+        fig, avg_cats = bar_chart_categories(filtered, rate=conv_rate, symbol=sym())
         st.pyplot(fig)
     with col_r:
         st.subheader("Category distribution")
         st.pyplot(pie_chart_categories(avg_cats))
 
     st.subheader("💼 Income Bracket Comparison")
-    st.pyplot(bracket_comparison_chart(df))
+    st.pyplot(bracket_comparison_chart(df, rate=conv_rate, symbol=sym()))
 
     st.subheader("📅 Monthly Spending Trend")
-    st.pyplot(monthly_trend_chart(filtered))
+    st.pyplot(monthly_trend_chart(filtered, rate=conv_rate, symbol=sym()))
 
     if "Festivals" in df.columns:
         st.subheader("🎉 Festival Impact")
@@ -837,7 +852,7 @@ with tab5:
 
         col_r1, col_r2 = st.columns(2)
         with col_r1:
-            st.dataframe(rate_df, hide_index=True, width='stretch')
+            st.dataframe(rate_df, hide_index=True, use_container_width=True)
         with col_r2:
             # Converter
             st.write("**Quick Converter:**")
@@ -854,4 +869,5 @@ with tab5:
                 [(k, f"{v:.4f}") for k, v in sorted(rates["rates"].items())],
                 columns=["Currency", f"1 {base_code} ="]
             )
-            st.dataframe(all_rates_df, hide_index=True, width='stretch')
+            st.dataframe(all_rates_df, hide_index=True, use_container_width=True)
+S
