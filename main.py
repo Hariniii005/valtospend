@@ -388,10 +388,10 @@ with tab1:
         col_a, col_b = st.columns(2)
         with col_a:
             st.markdown("<div class='section-tag'>By Category</div>", unsafe_allow_html=True)
-            st.plotly_chart(personal_category_chart(my_df, symbol=sym()), use_container_width=True)
+            st.plotly_chart(personal_category_chart(my_df, symbol=sym()), use_container_width=True, key="personal_cat_chart")
         with col_b:
             st.markdown("<div class='section-tag'>Over Time</div>", unsafe_allow_html=True)
-            st.plotly_chart(personal_weekly_chart(my_df, symbol=sym()), use_container_width=True)
+            st.plotly_chart(personal_weekly_chart(my_df, symbol=sym()), use_container_width=True, key="personal_weekly_chart")
 
         st.markdown("<div class='section-tag'>Insights</div>", unsafe_allow_html=True)
         cat_totals  = my_df.groupby("category")["amount"].sum()
@@ -513,16 +513,16 @@ with tab3:
     with col_l:
         st.markdown("<div class='section-tag'>Average Spend per Category</div>", unsafe_allow_html=True)
         fig, avg_cats = bar_chart_categories(filtered, rate=conv_rate, symbol=sym())
-        st.plotly_chart(fig, use_container_width=True)
+        st.plotly_chart(fig, use_container_width=True, key="market_bar_chart")
     with col_r:
         st.markdown("<div class='section-tag'>Category Distribution</div>", unsafe_allow_html=True)
-        st.plotly_chart(pie_chart_categories(avg_cats), use_container_width=True)
+        st.plotly_chart(pie_chart_categories(avg_cats), use_container_width=True, key="market_pie_chart")
 
     st.markdown("<div class='section-tag'>Income Bracket Comparison</div>", unsafe_allow_html=True)
-    st.plotly_chart(bracket_comparison_chart(df, rate=conv_rate, symbol=sym()), use_container_width=True)
+    st.plotly_chart(bracket_comparison_chart(df, rate=conv_rate, symbol=sym()), use_container_width=True, key="bracket_chart")
 
     st.markdown("<div class='section-tag'>Monthly Spending Trend</div>", unsafe_allow_html=True)
-    st.plotly_chart(monthly_trend_chart(filtered, rate=conv_rate, symbol=sym()), use_container_width=True)
+    st.plotly_chart(monthly_trend_chart(filtered, rate=conv_rate, symbol=sym()), use_container_width=True, key="monthly_trend_chart")
 
     if "Festivals" in df.columns:
         st.markdown("<div class='section-tag'>Festival Impact</div>", unsafe_allow_html=True)
@@ -545,7 +545,7 @@ with tab4:
     ma, mb = st.columns(2)
     ma.metric(f"Forecast for {next_lbl}", fmt(next_p))
     mb.metric("Mean Absolute Error", fmt(mae_ts))
-    st.plotly_chart(forecast_chart(monthly_ts, t_preds, next_p, next_lbl, symbol=sym()), use_container_width=True)
+    st.plotly_chart(forecast_chart(monthly_ts, t_preds, next_p, next_lbl, symbol=sym()), use_container_width=True, key="forecast_chart")
 
     st.divider()
 
@@ -555,7 +555,7 @@ with tab4:
     mc, md = st.columns(2)
     mc.metric("Mean Absolute Error", fmt(mae_rf))
     md.metric("R-squared", f"{r2_rf:.3f}")
-    st.plotly_chart(feature_importance_chart(rf, FEATURES + ["Income_Bracket"]), use_container_width=True)
+    st.plotly_chart(feature_importance_chart(rf, FEATURES + ["Income_Bracket"]), use_container_width=True, key="feature_importance_chart")
 
     p1, p2, p3 = st.columns(3)
     income_in = p1.slider("Monthly income", 500, 10000,
@@ -579,7 +579,7 @@ with tab4:
     n1, n2 = st.columns(2)
     n1.metric("Mean Absolute Error", fmt(mae_nn))
     n2.metric("R-squared", f"{r2_nn:.3f}")
-    st.plotly_chart(nn_loss_chart(losses), use_container_width=True)
+    st.plotly_chart(nn_loss_chart(losses), use_container_width=True, key="nn_loss_chart")
 
     st.markdown("<div class='section-tag'>Model Comparison</div>", unsafe_allow_html=True)
     comparison = pd.DataFrame({
@@ -629,7 +629,7 @@ with tab5:
         if stats["category_totals"]:
             st.markdown("<div class='section-tag'>Community Spend by Category</div>", unsafe_allow_html=True)
             st.plotly_chart(community_category_chart(stats["category_totals"], symbol=sym()),
-                           use_container_width=True)
+                           use_container_width=True, key="community_chart")
     else:
         st.info("No community data yet. Be the first to log an expense.")
 
