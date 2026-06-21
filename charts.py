@@ -191,4 +191,42 @@ def community_category_chart(category_totals, symbol="EUR"):
     ))
     fig.update_layout(yaxis_title=f"Total ({symbol})")
     _style(fig, showlegend=False)
-    return figS
+    return fig
+
+
+def personal_forecast_chart(monthly, trend_preds, predicted, next_label, symbol="EUR"):
+    """Line chart showing the user's own spending history plus next-month projection."""
+    labels = monthly["month"].tolist()
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(
+        x=labels, y=monthly["amount"], mode="lines+markers", name="Actual",
+        line=dict(color=ACCENT, width=2.5), marker=dict(size=7),
+        hovertemplate="<b>%{x}</b><br>" + symbol + " %{y:,.2f}<extra></extra>",
+    ))
+    fig.add_trace(go.Scatter(
+        x=labels + [next_label], y=list(trend_preds) + [predicted], mode="lines",
+        name="Trend", line=dict(color="#888888", width=1.5, dash="dash"),
+        hoverinfo="skip",
+    ))
+    fig.add_trace(go.Scatter(
+        x=[next_label], y=[predicted], mode="markers", name="Forecast",
+        marker=dict(color="#E85D75", size=13, symbol="diamond"),
+        hovertemplate=f"<b>Forecast — {next_label}</b><br>{symbol} %{{y:,.2f}}<extra></extra>",
+    ))
+    fig.update_layout(yaxis_title=f"Monthly Spend ({symbol})")
+    _style(fig)
+    return fig
+
+
+def category_trend_chart(trends_df, symbol="EUR"):
+    """Horizontal bar chart showing projected % change per category."""
+    trends_df = trends_df.sort_values("pct_change")
+    colors = ["#E85D75" if v > 0 else ACCENT for v in trends_df["pct_change"]]
+    fig = go.Figure(go.Bar(
+        x=trends_df["pct_change"], y=trends_df["category"], orientation="h",
+        marker=dict(color=colors),
+        hovertemplate="<b>%{y}</b><br>%{x:+.1f}% projected<extra></extra>",
+    ))
+    fig.update_layout(xaxis_title="Projected change (%)", height=380)
+    _style(fig, showlegend=False)
+    return fig

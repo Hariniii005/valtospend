@@ -135,3 +135,99 @@ def neural_network_scratch(df):
     r2  = r2_score(y_actual, preds)
 
     return mae, r2, losses
+
+
+def personal_expense_forecast(my_df):
+    """
+    Forecast the user's own next-month total spend from their logged expenses.
+    Uses Linear Regression on the user's monthly totals.
+    Falls back gracefully if fewer than 2 months of history exist.
+    Returns: predicted amount, next month label, monthly history dataframe, or None if insufficient data.
+    """
+    if my_df.empty:
+        return None
+
+    work = my_df.copy()
+    work["month"] = work["date"].dt.to_period("M").astype(str)
+    monthly = work.groupby("month")["amount"].sum().reset_index()
+    monthly["idx"] = range(len(monthly))
+
+    if len(monthly) < 2:
+        return None
+
+    lr = LinearRegression()
+    lr.fit(monthly[["idx"]], monthly["amount"])
+    predicted   = lr.predict([[len(monthly)]])[0]
+    trend_preds = lr.predict(monthly[["idx"]])
+    next_label  = (work["date"].max() + pd.DateOffset(months=1)).strftime("%B %Y")
+
+    return {
+        "predicted":   max(predicted, 0),
+        "next_label":  next_label,
+        "monthly":     monthly,
+        "trend_preds": trend_preds,
+    }
+
+
+def category_price_trends(df, months_ahead=12):
+    """
+    Project the average spend per category forward, combining two signals:
+
+    1. The category's own historical trend in this dataset (2021-2024),
+       fitted with Linear Regression — captures behavioural drift.
+    2. Real, published Destatis CPI inflation rates per category —
+       captures price-level changes the static dataset cannot, since
+       it ends in 2024 while the present date is later.
+
+    The CPI layer corrects the dataset's "current_avg" baseline forward
+    to today's price level before projecting further ahead, making the
+    projection meaningfully more current without inventing any rows.
+
+    Returns a DataFrame: category, current_avg, projected_avg, pct_change.
+    """
+    from charts import SPEND_COLS  # local import avoids circular dependency
+    from cpi_data import average_recent_rate, CPI_SOURCE
+
+    monthly = df.groupby("Date")[SPEND_COLS].mean().reset_index().sort_values("Date")
+    monthly["idx"] = range(len(monthly))
+
+    dataset_last_year = df["Date"].max().year  # typically 2024
+    from datetime import date as _date
+    years_since_dataset = max(_date.today().year - dataset_last_year, 0)
+
+    rows = []
+    for cat in SPEND_COLS:
+        lr = LinearRegression()
+        lr.fit(monthly[["idx"]], monthly[cat])
+
+        raw_current = monthly[cat].iloc[-1]
+
+        # Step 1 — bring the dataset's 2024 baseline up to today's price level
+        # using the real annual CPI rate for this category, compounded for
+        # however many years have passed since the dataset ended.
+        annual_rate = average_recent_rate(cat, years=2) / 100
+        cpi_adjusted_current = raw_current * ((1 + annual_rate) ** years_since_dataset)
+
+        # Step 2 — project the dataset's own behavioural trend forward
+        # from its last point, then apply the same CPI growth rate to
+        # the additional months_ahead horizon.
+        future_idx = len(monthly) - 1 + months_ahead
+        trend_projection = max(lr.predict([[future_idx]])[0], 0)
+        months_fraction = months_ahead / 12
+        cpi_adjusted_projection = trend_projection * ((1 + annual_rate) ** (years_since_dataset + months_fraction))
+
+        pct_change = (
+            (cpi_adjusted_projection - cpi_adjusted_current) / cpi_adjusted_current * 100
+        ) if cpi_adjusted_current else 0
+
+        rows.append({
+            "category": cat,
+            "current_avg": cpi_adjusted_current,
+            "projected_avg": cpi_adjusted_projection,
+            "pct_change": pct_change,
+            "annual_inflation_rate": annual_rate * 100,
+        })
+
+    result = pd.DataFrame(rows).sort_values("pct_change", ascending=False)
+    result.attrs["source"] = CPI_SOURCE
+    return result

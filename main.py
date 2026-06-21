@@ -14,11 +14,12 @@ from sklearn.linear_model import LinearRegression
 from database  import (init_db, load_data, load_my_expenses, add_my_expense,
                         delete_my_expense, get_budgets, set_budget, export_expenses_csv)
 from ai_models import (linear_regression_forecast, random_forest_model,
-                       neural_network_scratch, FEATURES)
+                       neural_network_scratch, personal_expense_forecast,
+                       category_price_trends, FEATURES)
 from charts    import (bar_chart_categories, pie_chart_categories, bracket_comparison_chart,
                        monthly_trend_chart, personal_category_chart, personal_weekly_chart,
                        forecast_chart, feature_importance_chart, nn_loss_chart,
-                       community_category_chart)
+                       community_category_chart, personal_forecast_chart, category_trend_chart)
 from receipt   import read_receipt_with_ai
 from auth      import init_users_table, register_user, login_user, update_profile
 from live_data import get_live_rates, get_community_stats
@@ -112,6 +113,11 @@ hr { border-color: #161616 !important; }
 .insight-line {
     border-left: 2px solid #00C9A7; padding: 0.5rem 0 0.5rem 0.9rem;
     color: #cccccc; font-size: 0.92rem; margin-bottom: 0.6rem;
+}
+/* Constrain sidebar to a fixed, reasonable width */
+section[data-testid="stSidebar"] {
+    min-width: 260px !important;
+    max-width: 280px !important;
 }
 /* Accessibility: visible focus outlines for keyboard navigation */
 button:focus-visible, input:focus-visible, select:focus-visible,
@@ -346,7 +352,8 @@ with st.sidebar:
                 st.session_state[k] = False if k in ("logged_in","splash_shown") else None
             st.rerun()
 
-    st.markdown("<div class='section-tag' style='margin-top:1.4rem;'>Filters</div>", unsafe_allow_html=True)
+    st.markdown("<div class='section-tag' style='margin-top:1.4rem;'>Filter — Market Insights</div>", unsafe_allow_html=True)
+    st.caption("Applies only to the Market Insights tab")
     brackets_list = ["All"] + sorted(df["Income_Bracket"].dropna().unique().tolist())
     sel_bracket   = st.selectbox("Income bracket filter", brackets_list, label_visibility="collapsed")
 
@@ -374,7 +381,7 @@ if sel_bracket != "All":
     filtered = filtered[filtered["Income_Bracket"] == sel_bracket]
 
 tab1, tab2, tab3, tab4, tab5 = st.tabs(
-    ["Overview", "Budget", "Market Insights", "Predictions", "Live Data"]
+    ["Overview", "Budget", "Predictions", "Live Data", "Market Insights"]
 )
 
 # ══════════════════════════════════════════════════════════════
@@ -591,74 +598,77 @@ with tab2:
                 st.divider()
 
 # ══════════════════════════════════════════════════════════════
-# TAB 3 — MARKET INSIGHTS
+# TAB 5 — MARKET INSIGHTS
 # ══════════════════════════════════════════════════════════════
 with tab3:
-    st.markdown("<div class='section-tag'>Benchmark</div>", unsafe_allow_html=True)
-    st.header("Market Insights")
-    st.caption("Patterns drawn from 3,655 household records (2021–2024), used as the model's training foundation. Category behaviour and income-bracket ratios remain consistent over time.")
+    st.markdown("<div class='section-tag'>Forecasting</div>", unsafe_allow_html=True)
+    st.header("Predictions")
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Records",            f"{len(filtered):,}")
-    c2.metric("Avg Monthly Spend",  fmt(filtered['Total_Expenses'].mean()))
-    c3.metric("Avg Monthly Income", fmt(filtered['Income'].mean()))
-    c4.metric("Avg Monthly Savings",fmt(filtered['Savings'].mean()))
+    # ── PRIMARY: Personal next-month forecast ────────────────────────────
+    st.markdown("<div class='section-tag'>Your Next Month</div>", unsafe_allow_html=True)
+    st.caption("Based on your own logged expenses.")
 
-    conv_rate = get_conversion_rate()
-    col_l, col_r = st.columns(2)
-    try:
-        with col_l:
-            st.markdown("<div class='section-tag'>Average Spend per Category</div>", unsafe_allow_html=True)
-            fig, avg_cats = bar_chart_categories(filtered, rate=conv_rate, symbol=sym())
-            st.plotly_chart(fig, use_container_width=True, key="market_bar_chart")
-        with col_r:
-            st.markdown("<div class='section-tag'>Category Distribution</div>", unsafe_allow_html=True)
-            st.plotly_chart(pie_chart_categories(avg_cats), use_container_width=True, key="market_pie_chart")
-    except Exception:
-        st.warning("Charts could not be rendered for the current filter selection.")
+    my_df_pred = load_my_expenses(user_id)
+    personal_forecast = personal_expense_forecast(my_df_pred)
 
-    st.markdown("<div class='section-tag'>Income Bracket Comparison</div>", unsafe_allow_html=True)
-    st.plotly_chart(bracket_comparison_chart(df, rate=conv_rate, symbol=sym()), use_container_width=True, key="bracket_chart")
-
-    st.markdown("<div class='section-tag'>Monthly Spending Trend</div>", unsafe_allow_html=True)
-    st.plotly_chart(monthly_trend_chart(filtered, rate=conv_rate, symbol=sym()), use_container_width=True, key="monthly_trend_chart")
-
-    if "Festivals" in df.columns:
-        st.markdown("<div class='section-tag'>Festival Impact</div>", unsafe_allow_html=True)
-        fest_s = (filtered.groupby("Festivals")["Total_Expenses"].mean()
-                  .reset_index()
-                  .rename(columns={"Festivals":"Festival","Total_Expenses":"Avg Expenses"})
-                  .sort_values("Avg Expenses", ascending=False).reset_index(drop=True))
-        st.dataframe(fest_s, use_container_width=True)
-
-# ══════════════════════════════════════════════════════════════
-# TAB 4 — PREDICTIONS
-# ══════════════════════════════════════════════════════════════
-with tab4:
-    st.markdown("<div class='section-tag'>Machine Learning</div>", unsafe_allow_html=True)
-    st.header("Prediction Engine")
-
-    st.markdown("<div class='section-tag'>Next Month Forecast — Linear Regression</div>", unsafe_allow_html=True)
-    st.caption("Trained on the monthly average spending trend across all records.")
-    next_p, mae_ts, t_preds, next_lbl, monthly_ts = cached_linear_forecast(df)
-    ma, mb = st.columns(2)
-    ma.metric(f"Forecast for {next_lbl}", fmt(next_p))
-    mb.metric("Mean Absolute Error", fmt(mae_ts))
-    st.plotly_chart(forecast_chart(monthly_ts, t_preds, next_p, next_lbl, symbol=sym()), use_container_width=True, key="forecast_chart")
+    if personal_forecast is None:
+        st.info("Log expenses across at least two months in the My Expenses tab to unlock your personal forecast.")
+    else:
+        st.metric(f"Forecast for {personal_forecast['next_label']}",
+                  fmt(personal_forecast["predicted"]))
+        st.plotly_chart(
+            personal_forecast_chart(
+                personal_forecast["monthly"], personal_forecast["trend_preds"],
+                personal_forecast["predicted"], personal_forecast["next_label"], symbol=sym()
+            ),
+            use_container_width=True, key="personal_forecast_chart"
+        )
 
     st.divider()
 
-    st.markdown(f"<div class='section-tag'>Personal Predictor — Random Forest</div>", unsafe_allow_html=True)
-    st.caption("An ensemble of 10 decision trees trained on income, bracket, month, and category ratios.")
+    # ── Category price trends ────────────────────────────────────────────
+    st.markdown("<div class='section-tag'>Category Price Trends</div>", unsafe_allow_html=True)
+    st.caption(
+        "Projected average spend per category over the next 12 months. "
+        "Combines this dataset's own spending trend with real, published "
+        "Destatis inflation rates, so the projection reflects current price "
+        "levels rather than only extrapolating data through 2024."
+    )
+
+    trends_df = category_price_trends(df, months_ahead=12)
+    st.plotly_chart(category_trend_chart(trends_df, symbol=sym()), use_container_width=True, key="category_trend_chart")
+
+    rising = trends_df[trends_df["pct_change"] > 0].sort_values("pct_change", ascending=False)
+    if not rising.empty:
+        top_rise = rising.iloc[0]
+        st.markdown(
+            f"<div class='insight-line'><b>{top_rise['category']}</b> is projected to rise "
+            f"<b>{top_rise['pct_change']:+.1f}%</b> over the next year, from "
+            f"{fmt(top_rise['current_avg'])} to {fmt(top_rise['projected_avg'])} on average.</div>",
+            unsafe_allow_html=True
+        )
+
+    with st.expander("View projected values per category"):
+        display_trends = trends_df.copy()
+        display_trends["current_avg"]   = display_trends["current_avg"].apply(fmt)
+        display_trends["projected_avg"] = display_trends["projected_avg"].apply(fmt)
+        display_trends["pct_change"]    = display_trends["pct_change"].apply(lambda v: f"{v:+.1f}%")
+        display_trends["annual_inflation_rate"] = display_trends["annual_inflation_rate"].apply(lambda v: f"{v:+.1f}%")
+        display_trends.columns = ["Category", "Current Average", "Projected (12mo)", "Change", "Annual Inflation Rate"]
+        st.dataframe(display_trends, hide_index=True, use_container_width=True)
+        st.caption(f"Inflation rates sourced from {trends_df.attrs.get('source', 'Destatis')}, German Federal Statistical Office, last verified June 2026.")
+
+    st.divider()
+
+    # ── Compare yourself to the market ───────────────────────────────────
+    st.markdown("<div class='section-tag'>Compare Yourself to the Market</div>", unsafe_allow_html=True)
+    st.caption("Trained on market-wide records. Enter your own figures to see how you compare.")
     rf, le, mae_rf, r2_rf = cached_random_forest(df)
-    mc, md = st.columns(2)
-    mc.metric("Mean Absolute Error", fmt(mae_rf))
-    md.metric("R-squared", f"{r2_rf:.3f}")
-    st.plotly_chart(feature_importance_chart(rf, FEATURES + ["Income_Bracket"]), use_container_width=True, key="feature_importance_chart")
 
     p1, p2, p3 = st.columns(3)
-    income_in = p1.slider("Monthly income", 500, 10000,
-                          int(min(max(user_income,500),10000)), step=100)
+    income_slider_max = max(20000, int(user_income) + 5000)
+    income_in = p1.number_input("Monthly income", min_value=0, max_value=1_000_000,
+                                value=int(min(max(user_income,0), income_slider_max)), step=100)
     month_in  = p2.slider("Month", 1, 12, date.today().month)
     fest_in   = p3.slider("Festival count", 0, 5, 1)
     bracket_options = list(le.classes_)
@@ -667,18 +677,35 @@ with tab4:
     bracket_enc     = le.transform([bracket_in])[0]
     default_ratios  = [0.20,0.12,0.10,0.08,0.10,0.25,0.07,0.04,0.04]
     input_row       = np.array([[income_in,month_in,fest_in,*default_ratios,bracket_enc]])
-    st.success(f"Predicted monthly expenses: {fmt(rf.predict(input_row)[0])}")
+    st.success(f"Estimated monthly expenses for this profile: {fmt(rf.predict(input_row)[0])}")
+
+    with st.expander("Model accuracy and technical details"):
+        mc, md = st.columns(2)
+        mc.metric("Mean Absolute Error", fmt(mae_rf))
+        md.metric("R-squared", f"{r2_rf:.3f}")
+        st.plotly_chart(feature_importance_chart(rf, FEATURES + ["Income_Bracket"]), use_container_width=True, key="feature_importance_chart")
 
     st.divider()
 
-    st.markdown("<div class='section-tag'>Neural Network — Built from Scratch</div>", unsafe_allow_html=True)
-    st.caption("Implemented in NumPy only, without TensorFlow. Two hidden layers (64 and 32 units), ReLU activation, trained by gradient descent over 100 epochs.")
-    with st.spinner("Training network..."):
-        mae_nn, r2_nn, losses = cached_neural_network(df)
-    n1, n2 = st.columns(2)
-    n1.metric("Mean Absolute Error", fmt(mae_nn))
-    n2.metric("R-squared", f"{r2_nn:.3f}")
-    st.plotly_chart(nn_loss_chart(losses), use_container_width=True, key="nn_loss_chart")
+    # ── Underlying models ────────────────────────────────────────────────
+    st.markdown("<div class='section-tag'>How These Predictions Are Made</div>", unsafe_allow_html=True)
+
+    with st.expander("Linear Regression — market trend baseline"):
+        st.caption("Trained on market-wide records. Used as the basis for category trend projections.")
+        next_p, mae_ts, t_preds, next_lbl, monthly_ts = cached_linear_forecast(df)
+        ma, mb = st.columns(2)
+        ma.metric(f"Market forecast for {next_lbl}", fmt(next_p))
+        mb.metric("Mean Absolute Error", fmt(mae_ts))
+        st.plotly_chart(forecast_chart(monthly_ts, t_preds, next_p, next_lbl, symbol=sym()), use_container_width=True, key="forecast_chart")
+
+    with st.expander("Neural Network — built from scratch"):
+        st.caption("A deep learning model that learns spending patterns directly from the data, used as a benchmark against the other two models.")
+        with st.spinner("Training network..."):
+            mae_nn, r2_nn, losses = cached_neural_network(df)
+        n1, n2 = st.columns(2)
+        n1.metric("Mean Absolute Error", fmt(mae_nn))
+        n2.metric("R-squared", f"{r2_nn:.3f}")
+        st.plotly_chart(nn_loss_chart(losses), use_container_width=True, key="nn_loss_chart")
 
     st.markdown("<div class='section-tag'>Model Comparison</div>", unsafe_allow_html=True)
     comparison = pd.DataFrame({
@@ -689,48 +716,25 @@ with tab4:
     })
     st.dataframe(comparison, hide_index=True, use_container_width=True)
 
-    with st.expander("View raw records"):
-        min_date = df["Date"].min().date()
-        max_date = df["Date"].max().date()
-        date_range = st.date_input("Filter by date range", value=(min_date, max_date),
-                                   min_value=min_date, max_value=max_date, key="records_date")
-        if isinstance(date_range, (list, tuple)) and len(date_range) == 2:
-            start, end = date_range
-            records_df = df[(df["Date"].dt.date >= start) & (df["Date"].dt.date <= end)]
-        else:
-            records_df = df
-        st.dataframe(records_df[["UserID","Date","Income","Income_Bracket",
-                          "Total_Expenses","Savings"]+SPEND_COLS].head(200), use_container_width=True)
-
 # ══════════════════════════════════════════════════════════════
-# TAB 5 — LIVE DATA
+# TAB 4 — LIVE DATA
 # ══════════════════════════════════════════════════════════════
-with tab5:
+with tab4:
     st.markdown("<div class='section-tag'>Real-Time</div>", unsafe_allow_html=True)
     st.header("Live Data")
 
-    st.markdown("<div class='section-tag'>Community Activity</div>", unsafe_allow_html=True)
-    st.caption("Aggregated statistics from every ValtoSpend account, updated as users log expenses.")
+    st.markdown("<div class='section-tag'>Spending Patterns</div>", unsafe_allow_html=True)
+    st.caption("Aggregated, anonymised category trends across the ValtoSpend platform. Individual user activity is never shown.")
 
     stats = get_community_stats()
 
-    c1, c2, c3, c4 = st.columns(4)
-    c1.metric("Registered Users", stats["total_users"])
-    c2.metric("Expenses Logged",  stats["total_logged"])
-    c3.metric("This Month",       stats["this_month"])
-    c4.metric("Top Category",     stats["top_category"])
-
-    if stats["total_logged"] > 0:
-        m_a, m_b = st.columns(2)
-        m_a.metric("Total Community Spend", fmt(stats["total_amount"]))
-        m_b.metric("Average per Transaction", fmt(stats["avg_expense"]))
-
-        if stats["category_totals"]:
-            st.markdown("<div class='section-tag'>Community Spend by Category</div>", unsafe_allow_html=True)
-            st.plotly_chart(community_category_chart(stats["category_totals"], symbol=sym()),
-                           use_container_width=True, key="community_chart")
+    if stats["total_logged"] > 0 and stats["category_totals"]:
+        st.markdown("<div class='section-tag'>Spend by Category — All Users</div>", unsafe_allow_html=True)
+        st.plotly_chart(community_category_chart(stats["category_totals"], symbol=sym()),
+                       use_container_width=True, key="community_chart")
+        st.metric("Average per Transaction", fmt(stats["avg_expense"]))
     else:
-        st.info("No community data yet. Be the first to log an expense.")
+        st.info("Category trends will appear here once enough data has been logged platform-wide.")
 
     st.divider()
 
@@ -781,3 +785,44 @@ with tab5:
                 columns=["Currency", f"1 {base_code} ="]
             )
             st.dataframe(all_rates_df, hide_index=True, use_container_width=True)
+with tab5:
+    st.markdown("<div class='section-tag'>Benchmark</div>", unsafe_allow_html=True)
+    st.header("Market Insights")
+    st.caption("Based on 3,655 household records (2021–2024), the dataset used to train ValtoSpend's prediction models. Category proportions and income-bracket behaviour change slowly, so these patterns remain a reliable benchmark today. Your own activity is tracked separately and stays current in the My Expenses and Predictions tabs.")
+
+    c1, c2, c3, c4 = st.columns(4)
+    c1.metric("Records",            f"{len(filtered):,}")
+    c2.metric("Avg Monthly Spend",  fmt(filtered['Total_Expenses'].mean()))
+    c3.metric("Avg Monthly Income", fmt(filtered['Income'].mean()))
+    c4.metric("Avg Monthly Savings",fmt(filtered['Savings'].mean()))
+
+    conv_rate = get_conversion_rate()
+    col_l, col_r = st.columns(2)
+    try:
+        with col_l:
+            st.markdown("<div class='section-tag'>Average Spend per Category</div>", unsafe_allow_html=True)
+            fig, avg_cats = bar_chart_categories(filtered, rate=conv_rate, symbol=sym())
+            st.plotly_chart(fig, use_container_width=True, key="market_bar_chart")
+        with col_r:
+            st.markdown("<div class='section-tag'>Category Distribution</div>", unsafe_allow_html=True)
+            st.plotly_chart(pie_chart_categories(avg_cats), use_container_width=True, key="market_pie_chart")
+    except Exception:
+        st.warning("Charts could not be rendered for the current filter selection.")
+
+    st.markdown("<div class='section-tag'>Income Bracket Comparison</div>", unsafe_allow_html=True)
+    st.plotly_chart(bracket_comparison_chart(df, rate=conv_rate, symbol=sym()), use_container_width=True, key="bracket_chart")
+
+    st.markdown("<div class='section-tag'>Monthly Spending Trend</div>", unsafe_allow_html=True)
+    st.plotly_chart(monthly_trend_chart(filtered, rate=conv_rate, symbol=sym()), use_container_width=True, key="monthly_trend_chart")
+
+    if "Festivals" in df.columns:
+        st.markdown("<div class='section-tag'>Festival Impact</div>", unsafe_allow_html=True)
+        fest_s = (filtered.groupby("Festivals")["Total_Expenses"].mean()
+                  .reset_index()
+                  .rename(columns={"Festivals":"Festival","Total_Expenses":"Avg Expenses"})
+                  .sort_values("Avg Expenses", ascending=False).reset_index(drop=True))
+        st.dataframe(fest_s, use_container_width=True)
+
+# ══════════════════════════════════════════════════════════════
+# TAB 4 — PREDICTIONS
+# ══════════════════════════════════════════════════════════════
