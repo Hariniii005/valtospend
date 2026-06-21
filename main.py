@@ -25,6 +25,22 @@ from live_data import get_live_rates, get_community_stats
 
 EXCHANGE_API_KEY = "99e195f29733ad0ef48de417"
 
+
+# ── Cached AI model wrappers ─────────────────────────────────────────────────
+# Streamlit caches these by dataframe content; results are reused until the
+# underlying data actually changes, so the UI feels instant after first load.
+@st.cache_data(show_spinner=False)
+def cached_linear_forecast(_df):
+    return linear_regression_forecast(_df)
+
+@st.cache_resource(show_spinner=False)
+def cached_random_forest(_df):
+    return random_forest_model(_df)
+
+@st.cache_data(show_spinner=False)
+def cached_neural_network(_df):
+    return neural_network_scratch(_df)
+
 SPEND_COLS = ["Food","Groceries","Transport","Entertainment",
               "Shopping","Rent","Bills","Healthcare","Education"]
 BRACKETS   = ["Low Income","Lower Middle Income","Middle Income",
@@ -96,6 +112,21 @@ hr { border-color: #161616 !important; }
 .insight-line {
     border-left: 2px solid #00C9A7; padding: 0.5rem 0 0.5rem 0.9rem;
     color: #cccccc; font-size: 0.92rem; margin-bottom: 0.6rem;
+}
+/* Accessibility: visible focus outlines for keyboard navigation */
+button:focus-visible, input:focus-visible, select:focus-visible,
+[tabindex]:focus-visible {
+    outline: 2px solid #00C9A7 !important;
+    outline-offset: 2px !important;
+}
+/* Accessibility: ensure sufficient text contrast on dark background */
+.stMarkdown p, .stMarkdown li { color: #d6d6d6 !important; }
+label { color: #aaaaaa !important; font-size: 0.85rem !important; }
+/* Larger tap targets for mobile and motor accessibility */
+.stButton > button { min-height: 2.6rem; }
+/* Reduce motion for users who prefer it */
+@media (prefers-reduced-motion: reduce) {
+    * { animation: none !important; transition: none !important; }
 }
 </style>
 """, unsafe_allow_html=True)
@@ -194,7 +225,14 @@ if not st.session_state.logged_in:
                 lu = st.text_input("Username")
                 lp = st.text_input("Password", type="password")
                 if st.form_submit_button("Sign In", type="primary", use_container_width=True):
-                    ok, result = login_user(lu, lp)
+                    if not lu or not lp:
+                        st.error("Please enter both username and password.")
+                        st.stop()
+                    try:
+                        ok, result = login_user(lu, lp)
+                    except Exception:
+                        st.error("Sign in is temporarily unavailable. Please try again shortly.")
+                        st.stop()
                     if ok:
                         uid, uname, income, bracket, currency = result
                         st.session_state.logged_in     = True
@@ -217,15 +255,29 @@ if not st.session_state.logged_in:
                 rbracket = st.selectbox("Income bracket", BRACKETS)
                 rcurr    = st.selectbox("Currency", list(CURRENCIES.keys()))
                 if st.form_submit_button("Create Account", type="primary", use_container_width=True):
+                    reg_errors = []
+                    if not ru or len(ru.strip()) < 3:
+                        reg_errors.append("Username must be at least 3 characters.")
+                    if not rp or len(rp) < 6:
+                        reg_errors.append("Password must be at least 6 characters.")
                     if rp != rp2:
-                        st.error("Passwords do not match.")
+                        reg_errors.append("Passwords do not match.")
+                    if rincome < 0:
+                        reg_errors.append("Income cannot be negative.")
+
+                    if reg_errors:
+                        for e in reg_errors:
+                            st.error(e)
                     else:
-                        curr_code = CURRENCIES[rcurr][0]
-                        ok, msg = register_user(ru, rp, rincome, rbracket, curr_code)
-                        if ok:
-                            st.success("Account created. Please sign in.")
-                        else:
-                            st.error(msg)
+                        try:
+                            curr_code = CURRENCIES[rcurr][0]
+                            ok, msg = register_user(ru, rp, rincome, rbracket, curr_code)
+                            if ok:
+                                st.success("Account created. Please sign in.")
+                            else:
+                                st.error(msg)
+                        except Exception:
+                            st.error("Registration could not be completed. Please try again.")
         st.markdown('</div>', unsafe_allow_html=True)
     st.stop()
 
@@ -305,11 +357,17 @@ if st.session_state.get("editing_profile"):
             new_bracket = st.selectbox("Income bracket", BRACKETS,
                            index=BRACKETS.index(user_bracket) if user_bracket in BRACKETS else 0)
             if st.form_submit_button("Save changes"):
-                update_profile(user_id, new_income, new_bracket, st.session_state.user_currency)
-                st.session_state.user_income  = new_income
-                st.session_state.user_bracket = new_bracket
-                st.session_state["editing_profile"] = False
-                st.rerun()
+                if new_income < 0:
+                    st.error("Income cannot be negative.")
+                else:
+                    try:
+                        update_profile(user_id, new_income, new_bracket, st.session_state.user_currency)
+                        st.session_state.user_income  = new_income
+                        st.session_state.user_bracket = new_bracket
+                        st.session_state["editing_profile"] = False
+                        st.rerun()
+                    except Exception:
+                        st.error("Could not save profile changes. Please try again.")
 
 filtered = df.copy()
 if sel_bracket != "All":
@@ -339,12 +397,18 @@ with tab1:
                 st.session_state[k] = v
 
         if uploaded_file and not st.session_state.scan_done:
-            with st.spinner("Reading receipt..."):
-                img_bytes  = uploaded_file.read()
-                media_type = "image/png" if uploaded_file.name.endswith(".png") else "image/jpeg"
-                result     = read_receipt_with_ai(img_bytes, media_type)
+            try:
+                with st.spinner("Reading receipt..."):
+                    img_bytes  = uploaded_file.read()
+                    if len(img_bytes) > 20 * 1024 * 1024:
+                        st.warning("Image is too large. Please upload a file under 20MB.")
+                        st.stop()
+                    media_type = "image/png" if uploaded_file.name.endswith(".png") else "image/jpeg"
+                    result     = read_receipt_with_ai(img_bytes, media_type)
+            except Exception:
+                result = {"error": "unexpected issue while reading the image"}
             if "error" in result:
-                st.warning(f"Could not read this receipt automatically ({result['error']}). Please enter the details manually.")
+                st.warning("Could not read this receipt automatically. Please enter the details manually below.")
             else:
                 st.success(f"Detected {fmt(result.get('amount',0))} — {result.get('note','')}")
                 st.session_state.prefill_amount   = float(result.get("amount", 10.0))
@@ -366,12 +430,29 @@ with tab1:
                                   placeholder="Optional description")
 
         if st.button("Save Expense", type="primary"):
-            add_my_expense(user_id, exp_date, exp_cat, exp_amt, exp_note)
-            st.success(f"Saved {fmt(exp_amt)} for {exp_cat}")
-            for k, v in [("prefill_amount",10.0),("prefill_category","Food"),
-                         ("prefill_note",""),("scan_done",False)]:
-                st.session_state[k] = v
-            st.rerun()
+            errors = []
+            if exp_amt <= 0:
+                errors.append("Amount must be greater than zero.")
+            if exp_amt > 1_000_000:
+                errors.append("Amount looks unusually large. Please check the value.")
+            if exp_date > date.today():
+                errors.append("Date cannot be in the future.")
+            if len(exp_note) > 200:
+                errors.append("Note is too long — please keep it under 200 characters.")
+
+            if errors:
+                for e in errors:
+                    st.error(e)
+            else:
+                try:
+                    add_my_expense(user_id, exp_date, exp_cat, exp_amt, exp_note)
+                    st.success(f"Saved {fmt(exp_amt)} for {exp_cat}")
+                    for k, v in [("prefill_amount",10.0),("prefill_category","Food"),
+                                 ("prefill_note",""),("scan_done",False)]:
+                        st.session_state[k] = v
+                    st.rerun()
+                except Exception:
+                    st.error("Could not save this expense right now. Please try again.")
 
     st.divider()
     my_df = load_my_expenses(user_id)
@@ -437,9 +518,21 @@ with tab1:
             c2.write(row["category"])
             c3.write(fmt(row["amount"]))
             c4.write(row["note"] if row["note"] else "—")
+            confirm_key = f"confirm_del_{row['id']}"
             if c5.button("Remove", key=f"del_{row['id']}"):
-                delete_my_expense(row["id"])
-                st.rerun()
+                st.session_state[confirm_key] = True
+            if st.session_state.get(confirm_key):
+                cc1, cc2 = st.columns(2)
+                if cc1.button("Confirm delete", key=f"yes_{row['id']}", type="primary"):
+                    try:
+                        delete_my_expense(row["id"])
+                    except Exception:
+                        st.error("Could not delete this entry. Please try again.")
+                    st.session_state[confirm_key] = False
+                    st.rerun()
+                if cc2.button("Cancel", key=f"no_{row['id']}"):
+                    st.session_state[confirm_key] = False
+                    st.rerun()
 
 # ══════════════════════════════════════════════════════════════
 # TAB 2 — BUDGET
@@ -465,10 +558,13 @@ with tab2:
         for i, cat in enumerate(SPEND_COLS):
             with cols[i % 3]:
                 current = budgets.get(cat, 0.0)
-                new_val = st.number_input(cat, min_value=0.0, value=float(current),
-                                          step=10.0, key=f"budget_{cat}")
+                new_val = st.number_input(cat, min_value=0.0, max_value=1_000_000.0,
+                                          value=float(current), step=10.0, key=f"budget_{cat}")
                 if new_val != current and new_val > 0:
-                    set_budget(user_id, cat, new_val)
+                    try:
+                        set_budget(user_id, cat, new_val)
+                    except Exception:
+                        st.error(f"Could not update budget for {cat}. Please try again.")
 
     st.divider()
     st.markdown(f"<div class='section-tag'>{date.today().strftime('%B %Y')}</div>", unsafe_allow_html=True)
@@ -510,13 +606,16 @@ with tab3:
 
     conv_rate = get_conversion_rate()
     col_l, col_r = st.columns(2)
-    with col_l:
-        st.markdown("<div class='section-tag'>Average Spend per Category</div>", unsafe_allow_html=True)
-        fig, avg_cats = bar_chart_categories(filtered, rate=conv_rate, symbol=sym())
-        st.plotly_chart(fig, use_container_width=True, key="market_bar_chart")
-    with col_r:
-        st.markdown("<div class='section-tag'>Category Distribution</div>", unsafe_allow_html=True)
-        st.plotly_chart(pie_chart_categories(avg_cats), use_container_width=True, key="market_pie_chart")
+    try:
+        with col_l:
+            st.markdown("<div class='section-tag'>Average Spend per Category</div>", unsafe_allow_html=True)
+            fig, avg_cats = bar_chart_categories(filtered, rate=conv_rate, symbol=sym())
+            st.plotly_chart(fig, use_container_width=True, key="market_bar_chart")
+        with col_r:
+            st.markdown("<div class='section-tag'>Category Distribution</div>", unsafe_allow_html=True)
+            st.plotly_chart(pie_chart_categories(avg_cats), use_container_width=True, key="market_pie_chart")
+    except Exception:
+        st.warning("Charts could not be rendered for the current filter selection.")
 
     st.markdown("<div class='section-tag'>Income Bracket Comparison</div>", unsafe_allow_html=True)
     st.plotly_chart(bracket_comparison_chart(df, rate=conv_rate, symbol=sym()), use_container_width=True, key="bracket_chart")
@@ -541,7 +640,7 @@ with tab4:
 
     st.markdown("<div class='section-tag'>Next Month Forecast — Linear Regression</div>", unsafe_allow_html=True)
     st.caption("Trained on the monthly average spending trend across all records.")
-    next_p, mae_ts, t_preds, next_lbl, monthly_ts = linear_regression_forecast(df)
+    next_p, mae_ts, t_preds, next_lbl, monthly_ts = cached_linear_forecast(df)
     ma, mb = st.columns(2)
     ma.metric(f"Forecast for {next_lbl}", fmt(next_p))
     mb.metric("Mean Absolute Error", fmt(mae_ts))
@@ -551,7 +650,7 @@ with tab4:
 
     st.markdown(f"<div class='section-tag'>Personal Predictor — Random Forest</div>", unsafe_allow_html=True)
     st.caption("An ensemble of 10 decision trees trained on income, bracket, month, and category ratios.")
-    rf, le, mae_rf, r2_rf = random_forest_model(df)
+    rf, le, mae_rf, r2_rf = cached_random_forest(df)
     mc, md = st.columns(2)
     mc.metric("Mean Absolute Error", fmt(mae_rf))
     md.metric("R-squared", f"{r2_rf:.3f}")
@@ -575,7 +674,7 @@ with tab4:
     st.markdown("<div class='section-tag'>Neural Network — Built from Scratch</div>", unsafe_allow_html=True)
     st.caption("Implemented in NumPy only, without TensorFlow. Two hidden layers (64 and 32 units), ReLU activation, trained by gradient descent over 100 epochs.")
     with st.spinner("Training network..."):
-        mae_nn, r2_nn, losses = neural_network_scratch(df)
+        mae_nn, r2_nn, losses = cached_neural_network(df)
     n1, n2 = st.columns(2)
     n1.metric("Mean Absolute Error", fmt(mae_nn))
     n2.metric("R-squared", f"{r2_nn:.3f}")
@@ -645,11 +744,14 @@ with tab5:
     )
     base_code = CURRENCIES[base_curr][0]
 
-    with st.spinner("Fetching rates..."):
-        rates = get_live_rates(EXCHANGE_API_KEY, base_code)
+    try:
+        with st.spinner("Fetching rates..."):
+            rates = get_live_rates(EXCHANGE_API_KEY, base_code)
+    except Exception:
+        rates = {"error": "network request failed"}
 
     if "error" in rates:
-        st.error(f"Could not fetch rates: {rates['error']}")
+        st.error("Live exchange rates are temporarily unavailable. Please try again shortly.")
     elif rates:
         st.caption(f"Updated: {rates.get('updated', 'unavailable')}")
 
