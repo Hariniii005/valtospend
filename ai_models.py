@@ -137,6 +137,69 @@ def neural_network_scratch(df):
     return mae, r2, losses
 
 
+def savings_goal_advice(my_df, income, goal_amount, current_month_spent):
+    """
+    Generate concrete suggestions for hitting a savings goal, based on
+    the user's own category spending this month. Identifies the
+    categories with the most room to cut, ranked by share of spend,
+    and estimates how much each would need to reduce by to close the gap.
+
+    Returns: dict with on_track (bool), shortfall, and a list of
+    suggestion strings ranked by impact.
+    """
+    projected_savings = income - current_month_spent
+    shortfall = goal_amount - projected_savings
+
+    if shortfall <= 0:
+        return {
+            "on_track": True,
+            "shortfall": 0,
+            "suggestions": [],
+        }
+
+    if my_df.empty:
+        return {
+            "on_track": False,
+            "shortfall": shortfall,
+            "suggestions": [
+                f"You are {shortfall:,.2f} short of your goal this month. "
+                "Log a few expenses to get category-specific suggestions."
+            ],
+        }
+
+    cat_totals = my_df.groupby("category")["amount"].sum().sort_values(ascending=False)
+    suggestions = []
+    remaining_gap = shortfall
+
+    for cat, spent in cat_totals.items():
+        if remaining_gap <= 0:
+            break
+        # Suggest trimming up to 20% of this category, capped at what's needed
+        max_trim = spent * 0.20
+        trim = min(max_trim, remaining_gap)
+        if trim < 1:
+            continue
+        suggestions.append(
+            f"Reducing {cat} by {trim:,.2f} (about "
+            f"{trim / spent * 100:.0f}% of this month's {cat} spend) "
+            f"would close {trim / shortfall * 100:.0f}% of the gap to your goal."
+        )
+        remaining_gap -= trim
+
+    if not suggestions:
+        suggestions.append(
+            f"You are {shortfall:,.2f} short of your goal. Spending is "
+            "already fairly low across categories — consider adjusting "
+            "the goal or finding additional income this month."
+        )
+
+    return {
+        "on_track": False,
+        "shortfall": shortfall,
+        "suggestions": suggestions,
+    }
+
+
 def personal_expense_forecast(my_df):
     """
     Forecast the user's own next-month total spend from their logged expenses.

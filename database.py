@@ -50,6 +50,26 @@ def init_db():
             UNIQUE(user_id, category)
         )
     """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS budget_history (
+            id        INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id   INTEGER NOT NULL,
+            month     TEXT NOT NULL,
+            category  TEXT NOT NULL,
+            limit_amount REAL NOT NULL,
+            spent_amount REAL NOT NULL,
+            UNIQUE(user_id, month, category)
+        )
+    """)
+    cursor.execute("""
+        CREATE TABLE IF NOT EXISTS savings_goals (
+            id          INTEGER PRIMARY KEY AUTOINCREMENT,
+            user_id     INTEGER NOT NULL,
+            month       TEXT NOT NULL,
+            goal_amount REAL NOT NULL,
+            UNIQUE(user_id, month)
+        )
+    """)
     count = cursor.execute("SELECT COUNT(*) FROM expenses").fetchone()[0]
     if count == 0 and os.path.exists(CSV_PATH):
         df_csv = pd.read_csv(CSV_PATH)
@@ -143,3 +163,68 @@ def export_expenses_csv(user_id: int) -> str:
     )
     conn.close()
     return df.to_csv(index=False)
+
+
+def snapshot_budget_month(user_id: int, month: str, category: str,
+                          limit_amount: float, spent_amount: float):
+    """
+    Record a category's budget performance for a given month. Called
+    once per category whenever that month's data is viewed, so that
+    once a new month begins, the previous month's result is preserved
+    even if the budget limit is later changed or removed.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO budget_history (user_id, month, category, limit_amount, spent_amount) "
+        "VALUES (?,?,?,?,?) "
+        "ON CONFLICT(user_id, month, category) DO UPDATE SET "
+        "limit_amount=excluded.limit_amount, spent_amount=excluded.spent_amount",
+        (user_id, month, category, limit_amount, spent_amount)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_budget_history(user_id: int, exclude_month: str = None) -> pd.DataFrame:
+    """
+    Return all past recorded months of budget performance for a user,
+    optionally excluding the current month so only completed months show.
+    """
+    conn = sqlite3.connect(DB_PATH)
+    if exclude_month:
+        df = pd.read_sql(
+            "SELECT month, category, limit_amount, spent_amount FROM budget_history "
+            "WHERE user_id=? AND month != ? ORDER BY month DESC",
+            conn, params=(user_id, exclude_month)
+        )
+    else:
+        df = pd.read_sql(
+            "SELECT month, category, limit_amount, spent_amount FROM budget_history "
+            "WHERE user_id=? ORDER BY month DESC",
+            conn, params=(user_id,)
+        )
+    conn.close()
+    return df
+
+
+def set_savings_goal(user_id: int, month: str, goal_amount: float):
+    """Set or update the user's savings goal for a given month."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "INSERT INTO savings_goals (user_id, month, goal_amount) VALUES (?,?,?) "
+        "ON CONFLICT(user_id, month) DO UPDATE SET goal_amount=excluded.goal_amount",
+        (user_id, month, goal_amount)
+    )
+    conn.commit()
+    conn.close()
+
+
+def get_savings_goal(user_id: int, month: str) -> float:
+    """Return the user's savings goal for a given month, or None if not set."""
+    conn = sqlite3.connect(DB_PATH)
+    row = conn.execute(
+        "SELECT goal_amount FROM savings_goals WHERE user_id=? AND month=?",
+        (user_id, month)
+    ).fetchone()
+    conn.close()
+    return row[0] if row else None

@@ -13,10 +13,11 @@ from sklearn.linear_model import LinearRegression
 
 from database  import (init_db, load_data, load_my_expenses, add_my_expense,
                         delete_my_expense, get_budgets, set_budget, delete_budget,
-                        export_expenses_csv)
+                        export_expenses_csv, snapshot_budget_month, get_budget_history,
+                        set_savings_goal, get_savings_goal)
 from ai_models import (linear_regression_forecast, random_forest_model,
                        neural_network_scratch, personal_expense_forecast,
-                       category_price_trends, FEATURES)
+                       category_price_trends, savings_goal_advice, FEATURES)
 from charts    import (bar_chart_categories, pie_chart_categories, bracket_comparison_chart,
                        monthly_trend_chart, personal_category_chart, personal_weekly_chart,
                        forecast_chart, feature_importance_chart, nn_loss_chart,
@@ -565,15 +566,75 @@ with tab2:
     my_df_b = load_my_expenses(user_id)
 
     this_month = date.today().strftime("%Y-%m")
+    this_month_label = date.today().strftime("%B %Y")
     if not my_df_b.empty:
         my_df_b["month"] = my_df_b["date"].dt.strftime("%Y-%m")
         this_month_df    = my_df_b[my_df_b["month"] == this_month]
         monthly_cats     = this_month_df.groupby("category")["amount"].sum().to_dict()
+        total_spent_this_month = this_month_df["amount"].sum()
     else:
         monthly_cats = {}
+        total_spent_this_month = 0.0
 
-    # ── Current budgets — shown immediately, no expander needed ─────────
-    st.markdown(f"<div class='section-tag'>{date.today().strftime('%B %Y')}</div>", unsafe_allow_html=True)
+    # ── Snapshot any completed past months not yet recorded ──────────────
+    if not my_df_b.empty:
+        past_months = sorted(m for m in my_df_b["month"].unique() if m != this_month)
+        for past_month in past_months:
+            past_df = my_df_b[my_df_b["month"] == past_month]
+            past_cats = past_df.groupby("category")["amount"].sum().to_dict()
+            for cat, limit in budgets.items():
+                try:
+                    snapshot_budget_month(user_id, past_month, cat, limit, past_cats.get(cat, 0.0))
+                except Exception:
+                    pass
+
+    # ── Savings goal ───────────────────────────────────────────────────────
+    st.markdown("<div class='section-tag'>Savings Goal</div>", unsafe_allow_html=True)
+    st.caption(f"How much you're aiming to save in {this_month_label}.")
+
+    current_goal = get_savings_goal(user_id, this_month)
+    col_g1, col_g2 = st.columns([2, 1])
+    with col_g1:
+        goal_input = st.number_input(
+            "Savings goal for this month", min_value=0.0, max_value=1_000_000.0,
+            value=float(current_goal) if current_goal else 0.0, step=10.0,
+            key="savings_goal_input"
+        )
+    with col_g2:
+        st.write("")
+        st.write("")
+        if st.button("Save Goal", type="primary"):
+            if goal_input <= 0:
+                st.error("Goal must be greater than zero.")
+            else:
+                try:
+                    set_savings_goal(user_id, this_month, goal_input)
+                    st.success("Savings goal saved.")
+                    st.rerun()
+                except Exception:
+                    st.error("Could not save your goal. Please try again.")
+
+    if current_goal:
+        projected_savings = user_income - total_spent_this_month
+        advice = savings_goal_advice(this_month_df if not my_df_b.empty else my_df_b,
+                                     user_income, current_goal, total_spent_this_month)
+
+        col_s1, col_s2, col_s3 = st.columns(3)
+        col_s1.metric("Goal", fmt(current_goal))
+        col_s2.metric("Projected Savings", fmt(projected_savings))
+        col_s3.metric("Spent So Far", fmt(total_spent_this_month))
+
+        if advice["on_track"]:
+            st.success(f"On track to meet your {fmt(current_goal)} goal this month.")
+        else:
+            st.warning(f"Currently {fmt(advice['shortfall'])} short of your goal.")
+            for s in advice["suggestions"]:
+                st.markdown(f"<div class='insight-line'>{s}</div>", unsafe_allow_html=True)
+
+    st.divider()
+
+    # ── Current month budgets — shown immediately ─────────────────────────
+    st.markdown(f"<div class='section-tag'>{this_month_label}</div>", unsafe_allow_html=True)
 
     if not budgets:
         st.info("No budgets set yet. Add one below to start tracking.")
@@ -633,6 +694,24 @@ with tab2:
                     st.rerun()
                 except Exception:
                     st.error("Could not save this budget. Please try again.")
+
+    # ── Budget history — past completed months ────────────────────────────
+    history_df = get_budget_history(user_id, exclude_month=this_month)
+    if not history_df.empty:
+        st.divider()
+        st.markdown("<div class='section-tag'>History</div>", unsafe_allow_html=True)
+        st.caption("Budget performance for completed months.")
+
+        for month in sorted(history_df["month"].unique(), reverse=True):
+            month_label = pd.Period(month).strftime("%B %Y")
+            with st.expander(month_label):
+                month_data = history_df[history_df["month"] == month]
+                for _, row in month_data.iterrows():
+                    pct = min(row["spent_amount"] / row["limit_amount"] * 100, 100) if row["limit_amount"] > 0 else 0
+                    status = "Over budget" if pct >= 100 else "Approaching limit" if pct >= 80 else "On track"
+                    st.markdown(f"**{row['category']}** — {status}")
+                    st.progress(int(pct))
+                    st.caption(f"Spent {fmt(row['spent_amount'])} of {fmt(row['limit_amount'])} limit ({pct:.0f}%)")
 
 # ══════════════════════════════════════════════════════════════
 # TAB 5 — MARKET INSIGHTS
