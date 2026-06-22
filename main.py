@@ -12,7 +12,8 @@ from datetime import date
 from sklearn.linear_model import LinearRegression
 
 from database  import (init_db, load_data, load_my_expenses, add_my_expense,
-                        delete_my_expense, get_budgets, set_budget, export_expenses_csv)
+                        delete_my_expense, get_budgets, set_budget, delete_budget,
+                        export_expenses_csv)
 from ai_models import (linear_regression_forecast, random_forest_model,
                        neural_network_scratch, personal_expense_forecast,
                        category_price_trends, FEATURES)
@@ -428,9 +429,18 @@ with tab1:
 
         c1, c2, c3, c4 = st.columns(4)
         exp_date = c1.date_input("Date", value=date.today())
-        cat_idx  = SPEND_COLS.index(st.session_state.prefill_category) \
-                   if st.session_state.prefill_category in SPEND_COLS else 0
-        exp_cat  = c2.selectbox("Category", SPEND_COLS, index=cat_idx)
+
+        existing_user_cats = set(load_my_expenses(user_id)["category"].unique()) if not load_my_expenses(user_id).empty else set()
+        available_cats = sorted(set(SPEND_COLS) | existing_user_cats | set(get_budgets(user_id).keys()))
+        category_options = available_cats + ["Add a new category..."]
+        cat_idx = available_cats.index(st.session_state.prefill_category) \
+                  if st.session_state.prefill_category in available_cats else 0
+        cat_choice = c2.selectbox("Category", category_options, index=cat_idx)
+        if cat_choice == "Add a new category...":
+            exp_cat = c2.text_input("New category name", placeholder="e.g. Pet Care")
+        else:
+            exp_cat = cat_choice
+
         exp_amt  = c3.number_input("Amount", min_value=0.01, step=0.50,
                                     value=float(st.session_state.prefill_amount))
         exp_note = c4.text_input("Note", value=st.session_state.prefill_note,
@@ -438,6 +448,8 @@ with tab1:
 
         if st.button("Save Expense", type="primary"):
             errors = []
+            if not exp_cat or not exp_cat.strip():
+                errors.append("Please enter a category name.")
             if exp_amt <= 0:
                 errors.append("Amount must be greater than zero.")
             if exp_amt > 1_000_000:
@@ -547,7 +559,7 @@ with tab1:
 with tab2:
     st.markdown("<div class='section-tag'>Spending Limits</div>", unsafe_allow_html=True)
     st.header("Monthly Budget")
-    st.caption("Set a limit per category and track progress against it through the month.")
+    st.caption("Set a limit for any category — including your own custom ones — and track progress through the month.")
 
     budgets = get_budgets(user_id)
     my_df_b = load_my_expenses(user_id)
@@ -560,42 +572,67 @@ with tab2:
     else:
         monthly_cats = {}
 
-    with st.expander("Set category budgets"):
-        cols = st.columns(3)
-        for i, cat in enumerate(SPEND_COLS):
-            with cols[i % 3]:
-                current = budgets.get(cat, 0.0)
-                new_val = st.number_input(cat, min_value=0.0, max_value=1_000_000.0,
-                                          value=float(current), step=10.0, key=f"budget_{cat}")
-                if new_val != current and new_val > 0:
-                    try:
-                        set_budget(user_id, cat, new_val)
-                    except Exception:
-                        st.error(f"Could not update budget for {cat}. Please try again.")
-
-    st.divider()
+    # ── Current budgets — shown immediately, no expander needed ─────────
     st.markdown(f"<div class='section-tag'>{date.today().strftime('%B %Y')}</div>", unsafe_allow_html=True)
 
     if not budgets:
-        st.info("No budgets set yet. Expand the panel above to define monthly limits per category.")
+        st.info("No budgets set yet. Add one below to start tracking.")
     else:
-        for cat in SPEND_COLS:
-            if cat in budgets:
-                limit     = budgets[cat]
-                spent     = monthly_cats.get(cat, 0.0)
-                pct       = min(spent / limit * 100, 100) if limit > 0 else 0
-                remaining = max(limit - spent, 0)
+        for cat, limit in budgets.items():
+            spent     = monthly_cats.get(cat, 0.0)
+            pct       = min(spent / limit * 100, 100) if limit > 0 else 0
+            remaining = max(limit - spent, 0)
 
-                col_l, col_r = st.columns([3, 1])
-                with col_l:
-                    status = "Over budget" if pct >= 100 else "Approaching limit" if pct >= 80 else "On track"
-                    st.markdown(f"**{cat}** — {status}")
-                    st.progress(int(pct))
-                with col_r:
-                    st.metric("Spent",     fmt(spent))
-                    st.metric("Remaining", fmt(remaining))
+            col_l, col_r = st.columns([3, 1])
+            with col_l:
+                status = "Over budget" if pct >= 100 else "Approaching limit" if pct >= 80 else "On track"
+                st.markdown(f"**{cat}** — {status}")
+                st.progress(int(pct))
                 st.caption(f"Limit {fmt(limit)} · {pct:.0f}% used")
-                st.divider()
+            with col_r:
+                st.metric("Spent",     fmt(spent))
+                st.metric("Remaining", fmt(remaining))
+                if st.button("Remove", key=f"remove_budget_{cat}"):
+                    try:
+                        delete_budget(user_id, cat)
+                        st.rerun()
+                    except Exception:
+                        st.error("Could not remove this budget. Please try again.")
+            st.divider()
+
+    # ── Add or update a budget ────────────────────────────────────────────
+    st.markdown("<div class='section-tag'>Add or Update a Budget</div>", unsafe_allow_html=True)
+    existing_cats = sorted(set(SPEND_COLS) | set(budgets.keys()))
+
+    col_a, col_b, col_c = st.columns([2, 1.4, 1])
+    with col_a:
+        category_choice = st.selectbox(
+            "Category", existing_cats + ["Add a new category..."],
+            key="budget_category_choice"
+        )
+        if category_choice == "Add a new category...":
+            category_name = st.text_input("New category name", placeholder="e.g. Pet Care, Subscriptions")
+        else:
+            category_name = category_choice
+    with col_b:
+        budget_amount = st.number_input("Monthly limit", min_value=0.0, max_value=1_000_000.0,
+                                        value=float(budgets.get(category_name, 0.0)) if category_name else 0.0,
+                                        step=10.0, key="budget_amount_input")
+    with col_c:
+        st.write("")
+        st.write("")
+        if st.button("Save Budget", type="primary"):
+            if not category_name or not category_name.strip():
+                st.error("Please enter a category name.")
+            elif budget_amount <= 0:
+                st.error("Budget amount must be greater than zero.")
+            else:
+                try:
+                    set_budget(user_id, category_name.strip(), budget_amount)
+                    st.success(f"Budget saved for {category_name.strip()}.")
+                    st.rerun()
+                except Exception:
+                    st.error("Could not save this budget. Please try again.")
 
 # ══════════════════════════════════════════════════════════════
 # TAB 5 — MARKET INSIGHTS
@@ -629,10 +666,9 @@ with tab3:
     # ── Category price trends ────────────────────────────────────────────
     st.markdown("<div class='section-tag'>Category Price Trends</div>", unsafe_allow_html=True)
     st.caption(
-        "Projected average spend per category over the next 12 months. "
-        "Combines this dataset's own spending trend with real, published "
-        "Destatis inflation rates, so the projection reflects current price "
-        "levels rather than only extrapolating data through 2024."
+        "Projected average spend per category over the next 12 months, "
+        "combining this dataset's spending trend with real, published "
+        "Destatis inflation rates."
     )
 
     trends_df = category_price_trends(df, months_ahead=12)
@@ -724,7 +760,7 @@ with tab4:
     st.header("Live Data")
 
     st.markdown("<div class='section-tag'>Spending Patterns</div>", unsafe_allow_html=True)
-    st.caption("Aggregated, anonymised category trends across the ValtoSpend platform. Individual user activity is never shown.")
+    st.caption("Aggregated category trends across the ValtoSpend platform.")
 
     stats = get_community_stats()
 

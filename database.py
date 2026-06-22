@@ -123,6 +123,17 @@ def set_budget(user_id: int, category: str, amount: float):
     conn.close()
 
 
+def delete_budget(user_id: int, category: str):
+    """Remove a budget limit for a category entirely."""
+    conn = sqlite3.connect(DB_PATH)
+    conn.execute(
+        "DELETE FROM budgets WHERE user_id=? AND category=?",
+        (user_id, category)
+    )
+    conn.commit()
+    conn.close()
+
+
 def export_expenses_csv(user_id: int) -> str:
     """Return personal expenses as CSV string for download."""
     conn = sqlite3.connect(DB_PATH)
